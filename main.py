@@ -371,18 +371,18 @@ TIER_1_AVOID = {
     # Banned Globally, Allowed in US
     "ractopamine": {"grade": "F", "reason": "BANNED in 168 countries including EU, China, Russia. Still in 60-80% of US pork.", "hidden_truth": "ractopamine"},
     "potassium bromate": {"grade": "F", "reason": "IARC Group 2B carcinogen. BANNED in EU, Canada, China, Japan, Brazil. Still in US bread.", "hidden_truth": "potassium bromate"},
-    "brominated vegetable oil": {"grade": "F", "reason": "BANNED in EU, Japan, India. Builds up in body tissue. FDA finally banned 2024."},
-    "azodicarbonamide": {"grade": "F", "reason": "BANNED in EU, Australia. Breaks down to carcinogenic semicarbazide. Used in US bread."},
-    "red 3": {"grade": "F", "reason": "FDA acknowledged carcinogen in 1990. BANNED in cosmetics. Still allowed in food."},
+    "brominated vegetable oil": {"grade": "F", "reason": "BANNED in EU, Japan, India. Builds up in body tissue. FDA finally banned 2024.", "hidden_truth": "brominated_vegetable_oil"},
+    "azodicarbonamide": {"grade": "F", "reason": "BANNED in EU, Australia. Breaks down to carcinogenic semicarbazide. Used in US bread.", "hidden_truth": "azodicarbonamide"},
+    "red 3": {"grade": "F", "reason": "FDA acknowledged carcinogen in 1990. BANNED in cosmetics. Still allowed in food.", "hidden_truth": "red_3"},
 
     # Known Endocrine Disruptors
-    "bha": {"grade": "F", "reason": "IARC Group 2B carcinogen. BANNED in EU for infant food. Endocrine disruptor."},
-    "butylated hydroxyanisole": {"grade": "F", "reason": "IARC Group 2B carcinogen. BANNED in EU for infant food."},
-    "bht": {"grade": "F", "reason": "Potential carcinogen. Banned in UK, Japan, Romania. Linked to behavioral issues in children."},
-    "butylated hydroxytoluene": {"grade": "F", "reason": "Potential carcinogen. Banned in UK, Japan, Romania."},
+    "bha": {"grade": "F", "reason": "IARC Group 2B carcinogen. BANNED in EU for infant food. Endocrine disruptor.", "hidden_truth": "BHA"},
+    "butylated hydroxyanisole": {"grade": "F", "reason": "IARC Group 2B carcinogen. BANNED in EU for infant food.", "hidden_truth": "BHA"},
+    "bht": {"grade": "F", "reason": "Potential carcinogen. Banned in UK, Japan, Romania. Linked to behavioral issues in children.", "hidden_truth": "BHT"},
+    "butylated hydroxytoluene": {"grade": "F", "reason": "Potential carcinogen. Banned in UK, Japan, Romania.", "hidden_truth": "BHT"},
 
     # Trans Fats
-    "partially hydrogenated": {"grade": "F", "reason": "Artificial trans fat. No safe level. FDA banned 2018 but loopholes remain."},
+    "partially hydrogenated": {"grade": "F", "reason": "Artificial trans fat. No safe level. FDA banned 2018 but loopholes remain.", "hidden_truth": "partially_hydrogenated"},
 }
 
 # TIER 2: 🟠 ORANGE (Grade D) - LIMIT
@@ -474,6 +474,7 @@ CORPORATE_PENALTIES = {
         "penalty": -15,
         "brands": ["Gerber", "DiGiorno", "Stouffer's", "Hot Pockets", "Lean Cuisine",
                    "Coffee-Mate", "Carnation", "Häagen-Dazs", "Dreyer's", "Nestle"],
+        "notable_brands": ["Lean Cuisine", "Hot Pockets", "DiGiorno", "Gerber"],
         "issues": [
             "Baby formula marketing violations (WHO code)",
             "Child labor in cocoa supply chain",
@@ -485,6 +486,7 @@ CORPORATE_PENALTIES = {
         "penalty": -12,
         "brands": ["Quaker", "Frito-Lay", "Tropicana", "Gatorade", "Naked Juice",
                    "Sabra", "Siete Foods", "Poppi", "Pepsi", "Lay's", "Doritos"],
+        "notable_brands": ["Naked Juice", "Tropicana", "Doritos", "Pepsi"],
         "issues": [
             "$9M settlement for 'all natural' GMO fraud (Naked Juice)",
             "Lobbying against soda taxes",
@@ -495,6 +497,7 @@ CORPORATE_PENALTIES = {
         "penalty": -12,
         "brands": ["Oscar Mayer", "Lunchables", "Velveeta", "Philadelphia",
                    "Jell-O", "Kool-Aid", "Maxwell House", "Capri Sun", "Kraft", "Heinz"],
+        "notable_brands": ["Lunchables", "Oscar Mayer", "Velveeta", "Kool-Aid"],
         "issues": [
             "Named in SF lawsuit (Dec 2025) for 'tobacco playbook' tactics",
             "Heavy lobbying against food safety regulations",
@@ -505,6 +508,7 @@ CORPORATE_PENALTIES = {
         "penalty": -10,
         "brands": ["Annie's", "Cascadian Farm", "Lärabar", "Nature Valley",
                    "Cheerios", "Lucky Charms", "Yoplait", "Häagen-Dazs"],
+        "notable_brands": ["Annie's Organic", "Cascadian Farm", "Lucky Charms", "Yoplait"],
         "issues": [
             "Glyphosate residues in Cheerios products",
             "Owns 'healthy' brands while selling sugary cereals",
@@ -515,6 +519,7 @@ CORPORATE_PENALTIES = {
         "penalty": -10,
         "brands": ["Kashi", "MorningStar Farms", "Bear Naked", "RXBar",
                    "Pringles", "Cheez-It", "Pop-Tarts", "Eggo", "Kellogg"],
+        "notable_brands": ["Kashi", "MorningStar Farms", "Pop-Tarts", "Cheez-It"],
         "issues": [
             "Named in SF lawsuit for ultra-processed foods",
             "Bought 'healthy' brands to capture health-conscious consumers",
@@ -525,6 +530,7 @@ CORPORATE_PENALTIES = {
         "penalty": -10,
         "brands": ["M&M's", "Snickers", "Skittles", "Twix", "Uncle Ben's",
                    "Pedigree", "Whiskas", "Mars"],
+        "notable_brands": ["M&M's", "Snickers", "Skittles", "Twix"],
         "issues": [
             "Named in SF lawsuit",
             "Child labor in cocoa supply chain",
@@ -535,6 +541,7 @@ CORPORATE_PENALTIES = {
         "penalty": -10,
         "brands": ["Oreo", "Chips Ahoy", "Ritz", "Triscuit", "Wheat Thins",
                    "Cadbury", "Toblerone", "Philadelphia"],
+        "notable_brands": ["Oreo", "Triscuit", "Cadbury", "Philadelphia"],
         "issues": [
             "Named in SF lawsuit",
             "Spun off from Kraft to avoid US regulations",
@@ -545,6 +552,7 @@ CORPORATE_PENALTIES = {
         "penalty": -12,
         "brands": ["Minute Maid", "Simply", "Honest Tea", "vitaminwater",
                    "Fairlife", "Topo Chico", "Costa Coffee", "Coca-Cola", "Coke"],
+        "notable_brands": ["Honest Tea", "vitaminwater", "Coca-Cola", "Minute Maid"],
         "issues": [
             "Named in SF lawsuit",
             "$7M+ annual lobbying",
@@ -556,6 +564,7 @@ CORPORATE_PENALTIES = {
         "penalty": -10,
         "brands": ["Healthy Choice", "Marie Callender's", "Hunt's", "PAM",
                    "Slim Jim", "Chef Boyardee", "Banquet", "ConAgra"],
+        "notable_brands": ["Healthy Choice", "Marie Callender's", "Slim Jim", "Chef Boyardee"],
         "issues": [
             "Named in SF lawsuit",
             "Ironic naming of 'Healthy Choice' ultra-processed meals",
@@ -566,6 +575,7 @@ CORPORATE_PENALTIES = {
         "penalty": -8,
         "brands": ["Ben & Jerry's", "Hellmann's", "Knorr", "Lipton",
                    "Breyers", "Magnum", "Talenti", "Unilever"],
+        "notable_brands": ["Ben & Jerry's", "Hellmann's", "Breyers", "Magnum"],
         "issues": [
             "Palm oil sourcing controversies",
             "Owns ethical brands while selling processed foods",
@@ -640,6 +650,67 @@ to rubber-stamp safety. The FDA has no idea what's in most processed foods.
 Companies don't have to disclose what's in them. They may include solvents,
 emulsifiers, and preservatives. "Natural" doesn't mean safe - arsenic is natural too.
 The only difference from "artificial flavors" is the original source material.
+    """,
+
+    "BHA": """
+🚨 HIDDEN TRUTH: BHA (Butylated Hydroxyanisole) is classified as a Group 2B carcinogen
+by the World Health Organization - meaning "possibly carcinogenic to humans."
+It's BANNED in baby food throughout the EU due to endocrine disruption risks.
+Studies show it causes tumors in rats. Yet the FDA allows it in cereals, chips,
+and processed meats because food industry lobbying convinced them the benefits
+outweigh the risks. Japan banned it outright. The UK doesn't want it in baby food.
+But in America, it's in your breakfast cereal.
+    """,
+
+    "BHT": """
+🚨 HIDDEN TRUTH: BHT (Butylated Hydroxytoluene) is banned in Japan, Romania, Sweden,
+and Australia due to cancer concerns. Research links it to behavioral problems in
+children and liver damage. It's structurally similar to BHA (also banned in many
+countries). Food companies use it to prevent fats from going rancid - essentially
+prioritizing shelf life over your health. The FDA allows it because proving
+definitive harm in humans is nearly impossible when you can't run 20-year
+controlled studies on people. So they let it slide.
+    """,
+
+    "brominated_vegetable_oil": """
+🚨 HIDDEN TRUTH: Brominated Vegetable Oil (BVO) was FINALLY banned by the FDA in
+2024 after 50+ years of use in sports drinks and sodas. Why so long? Because
+it took decades for enough evidence to pile up showing it accumulates in body
+tissue and causes neurological problems. The EU banned it years earlier.
+Japan banned it. India banned it. But Pepsi and Coca-Cola lobbied hard to
+keep it in the US market. If you bought Gatorade or Mountain Dew before 2024,
+you consumed a banned substance.
+    """,
+
+    "azodicarbonamide": """
+🚨 HIDDEN TRUTH: Azodicarbonamide is BANNED in the EU and Australia. When heated,
+it breaks down into semicarbazide - a carcinogen. It's the same chemical used
+to make yoga mats and shoe soles. Yet it's legal in US bread because it makes
+dough easier to work with. When Subway got called out for using it in 2014,
+they quietly removed it. But many bakeries still use it. The World Health
+Organization linked it to asthma in factory workers. The FDA's response?
+"It's generally recognized as safe." By who? The bread industry.
+    """,
+
+    "red_3": """
+🚨 HIDDEN TRUTH: The FDA acknowledged Red 3 as a carcinogen in 1990. They BANNED
+it in cosmetics and externally applied drugs that same year. But they left it
+legal in FOOD because removing it would be "too disruptive" to the food industry.
+You read that right - banned on your skin, allowed in your stomach. It causes
+thyroid tumors in rats. It's in candy, cake frosting, and maraschino cherries.
+The FDA has been "reviewing" it for 30+ years while you eat it. California
+finally banned it in 2023. The rest of the US? Still waiting.
+    """,
+
+    "partially_hydrogenated": """
+🚨 HIDDEN TRUTH: Artificial trans fats (partially hydrogenated oils) have NO SAFE LEVEL
+according to the American Heart Association. The FDA technically "banned" them in 2018...
+except they didn't. Loopholes allow up to 0.5g per serving to be labeled as "0g trans fat."
+Food companies just shrink serving sizes. And "fully hydrogenated" oils (which contain
+different harmful fats) are still legal. Trans fats increase bad cholesterol, decrease
+good cholesterol, and cause inflammation. The WHO estimates they cause 500,000+ deaths
+per year globally. But food industry lobbying ensured the "ban" has more holes than
+swiss cheese.
     """,
 }
 
@@ -1358,6 +1429,7 @@ def calculate_v4_score(product_data: dict) -> dict:
     # ========== 3. CORPORATE ETHICS (20% weight) ==========
     corporate_score = 70  # Default
     parent_company = None
+    corporate_disclosure = None
 
     for parent, data in CORPORATE_PENALTIES.items():
         # Check if brand matches any of the parent company's brands
@@ -1366,19 +1438,29 @@ def calculate_v4_score(product_data: dict) -> dict:
             parent_company = parent
             alerts.append(f"📍 OWNED BY: {parent}")
 
-            # Add corporate truth
+            # Build corporate disclosure object
+            corporate_disclosure = {
+                "parent_company": parent,
+                "issues": data["issues"],
+                "notable_brands": data.get("notable_brands", []),
+                "penalty_applied": data["penalty"]
+            }
+
+            # Add corporate truth with notable brands
             issues_text = "\n".join(f"• {issue}" for issue in data["issues"])
+            notable_brands_text = ", ".join(data.get("notable_brands", [])[:4])
             corporate_truth = f"""
 📍 CORPORATE OWNERSHIP ALERT
 
 {product_data.get('brand', 'This product')} is owned by {parent}.
 
-Parent company issues:
+⚠️ PARENT COMPANY ISSUES:
 {issues_text}
 
 💡 DID YOU KNOW?
-{parent} also makes many ultra-processed products while marketing "healthy" options.
-The same company profits from both ends of the spectrum.
+{parent} also makes: {notable_brands_text}
+The same company selling you this product also profits from ultra-processed foods.
+This is the "healthy brand + junk food" business model.
             """
             hidden_truths.append(corporate_truth)
             break
@@ -1455,7 +1537,8 @@ The same company profits from both ends of the spectrum.
         "ingredients_graded": ingredients_graded,
         "alerts": alerts,
         "hidden_truths": hidden_truths,
-        "parent_company": parent_company
+        "parent_company": parent_company,
+        "corporate_disclosure": corporate_disclosure
     }
 
 
@@ -1832,6 +1915,7 @@ Return ONLY a JSON object with this exact structure:
             "alerts": v4_results["alerts"],
             "hidden_truths": v4_results["hidden_truths"],
             "parent_company": v4_results.get("parent_company"),
+            "corporate_disclosure": v4_results.get("corporate_disclosure"),
 
             # Metadata
             "report_id": report_id,
