@@ -7,7 +7,7 @@ FOOD_MODULE = """
 FOOD-SPECIFIC PRIORITY INGREDIENTS:
 
 HIGH CONCERN (scores 7-10):
-- HFCS (high fructose corn syrup): 6
+- HFCS (high fructose corn syrup): 7
 - Palm oil: 5 (environmental + saturated fat)
 - BHA, BHT: 7 (preservatives, potential carcinogens)
 - Sodium nitrite: 7 (processed meats, carcinogen link)
@@ -52,6 +52,10 @@ BRAND AWARENESS:
 - Note brand name for common brands (Fiji, Evian, Dasani, Aquafina)
 - Dasani/Aquafina: Enhanced tap water (not spring)
 
+BOTTLE SAFETY NOTES:
+- Avoid reusing single-use bottles (bacterial growth risk)
+- Glass bottles eliminate plastic leaching concerns entirely
+
 CONDITION WEIGHT: 5% (source/contaminants matter most)
 """
 
@@ -77,6 +81,13 @@ POSITIVE CLAIMS TO DETECT:
 - "Phthalate-free" (+3)
 - "Fragrance-free" (+3)
 - "Hypoallergenic" (+3)
+- "Dermatologist-tested" (+3)
+- "Non-comedogenic" (+3)
+
+ADDITIONAL CONCERNS:
+- Sulfates (SLS, SLES): 4-5 (skin irritants, strip oils)
+- Mineral oil, petrolatum: 3-4 (pore-clogging potential)
+- Synthetic colors (FD&C, D&C): 5 (potential allergens)
 
 EXPIRATION: Important for mascara, sunscreen, creams
 
@@ -128,12 +139,19 @@ MODERATE CONCERN (scores 4-6):
 - Artificial fragrances: 5
 - Sodium lauryl sulfate (SLS): 4
 - Phosphates: 5 (environmental)
+- 2-Butoxyethanol: 6 (lung irritant, found in glass cleaners)
+- Perchloroethylene (PERC): 7 (dry cleaning fluid, neurotoxin)
 
 POSITIVE CLAIMS TO DETECT:
 - "Plant-based" (+3)
 - "Biodegradable" (+3)
 - "Fragrance-free" (+3)
 - "Non-toxic" (+3)
+- "EPA Safer Choice" (+3)
+
+SAFETY NOTES:
+- Never mix bleach with ammonia (creates toxic chloramine gas)
+- Ventilate when using strong cleaners to reduce inhalation exposure
 
 CONDITION WEIGHT: 5% (ingredients matter most)
 """
@@ -151,17 +169,27 @@ PRIORITY CONCERNS (scores vary):
 - Artificial fillers: 4-5
 - Allergen-containing binders: 3-5
 - Excess vitamins (fat-soluble A, D, E, K): 4-6
+- Magnesium stearate (flow agent): 3 (generally safe but reduces absorption)
+- Titanium dioxide (coating): 4 (potential nanoparticle concerns)
+
+DOSAGE SAFETY:
+- Check if dosages exceed RDA/safe upper limits
+- Mega-doses can cause toxicity even with "natural" ingredients
 
 POSITIVE CLAIMS TO DETECT:
 - "Third-party tested" (+3)
 - "USP verified" (+3)
 - "Non-GMO" (+3)
 - "Organic" (+3)
+- "GMP certified" (+3)
 
 EXPIRATION: Critical - potency degrades
 
 CONDITION WEIGHT: 5% (ingredients + testing matter most)
 """
+
+
+VALID_TYPES = {'food', 'water', 'cosmetics', 'cookware', 'cleaning', 'supplements'}
 
 
 def build_prompt(product_type: str) -> str:
@@ -176,6 +204,14 @@ def build_prompt(product_type: str) -> str:
     """
     from .base_prompt import BASE_PROMPT
 
+    if not isinstance(product_type, str):
+        product_type = 'food'  # Safe default
+
+    cleaned_type = product_type.lower().strip()
+
+    if cleaned_type not in VALID_TYPES:
+        cleaned_type = 'food'  # Safe default
+
     module_map = {
         'food': FOOD_MODULE,
         'water': WATER_MODULE,
@@ -185,7 +221,5 @@ def build_prompt(product_type: str) -> str:
         'supplements': SUPPLEMENTS_MODULE
     }
 
-    # Default to food if unknown type
-    category_module = module_map.get(product_type.lower(), FOOD_MODULE)
-
+    category_module = module_map[cleaned_type]
     return f"{BASE_PROMPT}\n\n{category_module}"

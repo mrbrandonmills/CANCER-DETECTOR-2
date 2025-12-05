@@ -55,3 +55,24 @@ def test_build_prompt_defaults_to_food():
     """Verify unknown product type defaults to food module"""
     unknown_prompt = build_prompt("unknown_type")
     assert FOOD_MODULE in unknown_prompt
+
+
+def test_build_prompt_handles_all_product_types():
+    """Verify all 6 product types return correct modules"""
+    types = ['food', 'water', 'cosmetics', 'cookware', 'cleaning', 'supplements']
+    for ptype in types:
+        prompt = build_prompt(ptype)
+        assert BASE_PROMPT in prompt
+        assert len(prompt) > len(BASE_PROMPT)
+
+
+def test_build_prompt_case_insensitive():
+    """Verify case-insensitive matching"""
+    assert build_prompt('FOOD') == build_prompt('food')
+    assert build_prompt('Water') == build_prompt('water')
+
+
+def test_build_prompt_handles_invalid_type():
+    """Verify invalid types default to food"""
+    invalid_prompt = build_prompt('invalid_type')
+    assert FOOD_MODULE in invalid_prompt
