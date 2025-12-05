@@ -22,6 +22,9 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import anthropic
 
+# V3 Modular Prompts
+from prompts import build_prompt
+
 # ============================================
 # CONFIGURATION
 # ============================================
@@ -137,6 +140,30 @@ TOXICITY_DATABASE = {
     "sulfuric acid": {"score": 7, "category": "caustic", "source": "EPA", "concerns": ["severe burns"]},
     "citric acid": {"score": 1, "category": "acid", "source": "FDA", "concerns": ["minimal"]},
     "lactic acid": {"score": 1, "category": "acid", "source": "FDA", "concerns": ["minimal"]},
+
+    # ========== ARTIFICIAL COLORS & FOOD ADDITIVES ==========
+    "red 40": {"score": 5, "category": "food_dye", "source": "FDA", "concerns": ["hyperactivity in children", "allergic reactions"]},
+    "allura red": {"score": 5, "category": "food_dye", "source": "FDA", "concerns": ["hyperactivity in children"]},
+    "yellow 5": {"score": 5, "category": "food_dye", "source": "FDA", "concerns": ["hyperactivity", "allergies"]},
+    "tartrazine": {"score": 5, "category": "food_dye", "source": "FDA", "concerns": ["hyperactivity", "allergies"]},
+    "yellow 6": {"score": 5, "category": "food_dye", "source": "FDA", "concerns": ["hyperactivity", "allergies"]},
+    "sunset yellow": {"score": 5, "category": "food_dye", "source": "FDA", "concerns": ["hyperactivity"]},
+    "blue 1": {"score": 5, "category": "food_dye", "source": "FDA", "concerns": ["allergic reactions"]},
+    "brilliant blue": {"score": 5, "category": "food_dye", "source": "FDA", "concerns": ["allergies"]},
+    "blue 2": {"score": 5, "category": "food_dye", "source": "FDA", "concerns": ["allergies"]},
+    "green 3": {"score": 5, "category": "food_dye", "source": "FDA", "concerns": ["allergies"]},
+    "bha": {"score": 7, "category": "preservative", "source": "IARC Group 2B", "concerns": ["possible carcinogen", "endocrine disruption"]},
+    "butylated hydroxyanisole": {"score": 7, "category": "preservative", "source": "IARC Group 2B", "concerns": ["possible carcinogen"]},
+    "bht": {"score": 7, "category": "preservative", "source": "IARC Group 3", "concerns": ["possible endocrine disruption"]},
+    "butylated hydroxytoluene": {"score": 7, "category": "preservative", "source": "IARC Group 3", "concerns": ["endocrine concerns"]},
+    "hfcs": {"score": 6, "category": "sweetener", "source": "FDA", "concerns": ["metabolic issues", "obesity", "diabetes risk"]},
+    "high fructose corn syrup": {"score": 6, "category": "sweetener", "source": "FDA", "concerns": ["metabolic issues", "obesity"]},
+    "sodium nitrite": {"score": 7, "category": "preservative", "source": "IARC Group 2A", "concerns": ["forms carcinogenic nitrosamines", "processed meat risk"]},
+    "sodium nitrate": {"score": 6, "category": "preservative", "source": "IARC Group 2A", "concerns": ["converts to nitrite", "cancer risk"]},
+    "msg": {"score": 3, "category": "flavor_enhancer", "source": "FDA", "concerns": ["headaches in sensitive individuals", "allergies"]},
+    "monosodium glutamate": {"score": 3, "category": "flavor_enhancer", "source": "FDA", "concerns": ["headaches", "allergies"]},
+    "tbhq": {"score": 6, "category": "preservative", "source": "FDA", "concerns": ["vision problems", "DNA damage in studies"]},
+    "tertiary butylhydroquinone": {"score": 6, "category": "preservative", "source": "FDA", "concerns": ["vision problems"]},
 
     # ========== SAFE INGREDIENTS ==========
     "water": {"score": 0, "category": "safe", "source": "FDA", "concerns": []},
@@ -696,6 +723,160 @@ def generate_recommendation(grade: str, flagged: List, condition: Dict = None) -
 
 
 # ============================================
+# V3 DATABASE ENRICHMENT & SCORING FUNCTIONS
+# ============================================
+
+def enrich_ingredients_with_database(ingredients_analysis: List[Dict]) -> List[Dict]:
+    """
+    Cross-reference Claude's ingredient analysis with V3 database
+    Use HIGHER score for safety (more conservative approach)
+
+    Args:
+        ingredients_analysis: List of ingredient dicts from Claude
+
+    Returns:
+        Enriched list with database scores where applicable
+    """
+    enriched = []
+
+    for ingredient in ingredients_analysis:
+        # Validate required fields exist
+        if 'name' not in ingredient or 'hazard_score' not in ingredient:
+            continue  # Skip malformed ingredients
+
+        ingredient_copy = ingredient.copy()
+        ingredient_name = ingredient['name'].lower().strip()
+
+        # Check database
+        db_entry = TOXICITY_DATABASE.get(ingredient_name)
+
+        if db_entry:
+            claude_score = ingredient['hazard_score']
+            db_score = db_entry['score']
+
+            # Use HIGHER score (more conservative)
+            if db_score > claude_score:
+                ingredient_copy['hazard_score'] = db_score
+                ingredient_copy['category'] = db_entry['category']
+                ingredient_copy['concerns'] = db_entry.get('concerns', [])
+                ingredient_copy['source'] = 'database'
+            else:
+                ingredient_copy['source'] = 'claude'
+        else:
+            # Novel ingredient not in database
+            ingredient_copy['source'] = 'claude'
+
+        enriched.append(ingredient_copy)
+
+    return enriched
+
+
+def calculate_ingredient_scores(ingredients_analysis: List[Dict]) -> Dict[str, Any]:
+    """
+    Calculate base safety score from ingredients with penalty system
+
+    Formula:
+    1. average_hazard = sum(scores) / count
+    2. base_score = 100 - (average_hazard * 10)
+    3. penalties = (count of scores >= 7) * 5 + (count of 4-6) * 2
+    4. safety_score = base_score - penalties
+
+    Args:
+        ingredients_analysis: List of ingredient dicts with hazard_score
+
+    Returns:
+        Dict with average_hazard_score, base_score, penalty, safety_score
+    """
+    if not ingredients_analysis:
+        return {
+            'average_hazard_score': 0.0,
+            'base_score': 100,
+            'penalty': 0,
+            'safety_score': 100
+        }
+
+    # Calculate average hazard
+    total_hazard = sum(ing['hazard_score'] for ing in ingredients_analysis)
+    count = len(ingredients_analysis)
+    avg_hazard = total_hazard / count
+
+    # Base score
+    base_score = 100 - (avg_hazard * 10)
+
+    # Calculate penalties
+    high_concern_count = sum(1 for ing in ingredients_analysis if ing['hazard_score'] >= 7)
+    moderate_count = sum(1 for ing in ingredients_analysis if 4 <= ing['hazard_score'] < 7)
+
+    penalty = (high_concern_count * 5) + (moderate_count * 2)
+
+    # Final safety score (before bonuses and condition)
+    safety_score = max(0, base_score - penalty)
+
+    return {
+        'average_hazard_score': round(avg_hazard, 2),
+        'base_score': int(base_score),
+        'penalty': penalty,
+        'safety_score': int(safety_score)
+    }
+
+
+def apply_positive_bonuses(score: int, positive_attributes: List[Dict]) -> int:
+    """
+    Apply positive bonuses from "X-free" claims
+    +3 per claim, max +15 total
+
+    Args:
+        score: Current safety score
+        positive_attributes: List of positive claim dicts
+
+    Returns:
+        Adjusted score with bonuses (capped at max)
+    """
+    if not positive_attributes:
+        return score
+
+    total_bonus = sum(attr.get('bonus_points', 3) for attr in positive_attributes)
+
+    # Cap at +15
+    total_bonus = min(total_bonus, 15)
+
+    adjusted = score + total_bonus
+
+    # Ensure within 0-100 range
+    return max(0, min(100, adjusted))
+
+
+def apply_condition_modifier(score: int, condition: Dict, product_type: str) -> int:
+    """
+    Apply condition modifier based on product type
+    - Food/Water/Cosmetics/Cleaning/Supplements: 5% weight
+    - Cookware: 15% weight (condition matters more)
+
+    Args:
+        score: Current score after ingredients and bonuses
+        condition: Condition dict with score (0-100)
+        product_type: Product category
+
+    Returns:
+        Final score with condition modifier
+    """
+    condition_score = condition.get('score', 100)
+
+    # Determine weight based on product type
+    if product_type.lower() == 'cookware':
+        weight = 0.15
+    else:
+        weight = 0.05
+
+    # Apply modifier
+    modifier = int(condition_score * weight)
+    adjusted = score + modifier
+
+    # Clamp to 0-100
+    return max(0, min(100, adjusted))
+
+
+# ============================================
 # API ENDPOINTS
 # ============================================
 
@@ -709,13 +890,16 @@ async def health_check():
     }
 
 
-@app.get("/health", response_model=HealthCheck)
+@app.get("/health")
 async def health():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "3.1.0",
-        "claude_api": "connected" if client else "not configured"
+        "version": "3.0.0",
+        "v3_ready": True,
+        "claude_api": "connected" if client else "not configured",
+        "modular_prompts": True,
+        "categories": ["food", "water", "cosmetics", "cookware", "cleaning", "supplements"]
     }
 
 
@@ -987,6 +1171,122 @@ async def database_stats():
         "low_hazard_count": sum(1 for d in TOXICITY_DATABASE.values() if d["score"] < 4),
         "total_materials": len(MATERIAL_DATABASE)
     }
+
+
+# ============================================
+# V3 API ENDPOINT
+# ============================================
+
+@app.post("/api/v3/scan")
+async def scan_product_v3(image: UploadFile = File(...)):
+    """
+    V3 Product Safety Scanner with Modular Prompts
+
+    Paradigm shift: 95% ingredient-focused, 5% condition-focused
+    Uses category-specific modules for specialized analysis
+    """
+
+    if not client:
+        raise HTTPException(status_code=500, detail="Anthropic API key not configured")
+
+    try:
+        # Validate content type
+        if not image.content_type or not image.content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type. Expected image/*, got {image.content_type}"
+            )
+
+        # Read and encode image
+        image_bytes = await image.read()
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+
+        # Step 1: Use modular prompt (default to 'food' for Phase 1)
+        # TODO: Implement type detection in future
+        product_type = "food"
+        full_prompt = build_prompt(product_type)
+
+        # Step 2: Single Claude API call with modular prompt
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": image.content_type,
+                                "data": image_base64
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": full_prompt
+                        }
+                    ]
+                }
+            ]
+        )
+
+        # Step 3: Parse Claude's response
+        analysis_text = response.content[0].text
+
+        # Extract JSON from response (Claude may wrap in markdown)
+        if "```json" in analysis_text:
+            json_start = analysis_text.find("```json") + 7
+            json_end = analysis_text.find("```", json_start)
+            analysis_text = analysis_text[json_start:json_end].strip()
+        elif "```" in analysis_text:
+            # Handle plain ``` without json
+            json_start = analysis_text.find("```") + 3
+            json_end = analysis_text.find("```", json_start)
+            analysis_text = analysis_text[json_start:json_end].strip()
+
+        claude_analysis = json.loads(analysis_text)
+
+        # Step 4: Enrich ingredients with database
+        if 'ingredients' in claude_analysis and 'analysis' in claude_analysis['ingredients']:
+            enriched_ingredients = enrich_ingredients_with_database(
+                claude_analysis['ingredients']['analysis']
+            )
+            claude_analysis['ingredients']['analysis'] = enriched_ingredients
+
+            # Recalculate scores with enriched data
+            scoring_result = calculate_ingredient_scores(enriched_ingredients)
+
+            # Apply positive bonuses
+            safety_with_bonuses = apply_positive_bonuses(
+                scoring_result['safety_score'],
+                claude_analysis.get('positive_attributes', [])
+            )
+
+            # Apply condition modifier
+            final_score = apply_condition_modifier(
+                safety_with_bonuses,
+                claude_analysis.get('condition', {'score': 100}),
+                claude_analysis.get('product_type', 'food')
+            )
+
+            # Update scores in response
+            claude_analysis['safety_score'] = scoring_result['safety_score']
+            claude_analysis['overall_score'] = final_score
+
+            # Calculate grade
+            claude_analysis['grade'] = calculate_grade(final_score)
+
+        # Add success flag
+        claude_analysis['success'] = True
+
+        # Return V3 response
+        return claude_analysis
+
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 # ============================================
