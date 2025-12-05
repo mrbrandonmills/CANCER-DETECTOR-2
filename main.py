@@ -357,6 +357,344 @@ MATERIAL_DATABASE = {
 }
 
 # ============================================
+# V4 TIER SYSTEM DATABASES
+# ============================================
+
+# TIER 1: 🔴 RED (Grade F) - AVOID
+# These trigger automatic score caps (cannot score above C/49)
+TIER_1_AVOID = {
+    # IARC Group 1 Carcinogens
+    "processed meat": {"grade": "F", "reason": "IARC Group 1 carcinogen (same category as tobacco)", "hidden_truth": "ractopamine"},
+    "sodium nitrite": {"grade": "F", "reason": "Forms carcinogenic nitrosamines, linked to colorectal cancer"},
+    "sodium nitrate": {"grade": "F", "reason": "Converts to nitrite, carcinogenic in processed meats"},
+
+    # Banned Globally, Allowed in US
+    "ractopamine": {"grade": "F", "reason": "BANNED in 168 countries including EU, China, Russia. Still in 60-80% of US pork.", "hidden_truth": "ractopamine"},
+    "potassium bromate": {"grade": "F", "reason": "IARC Group 2B carcinogen. BANNED in EU, Canada, China, Japan, Brazil. Still in US bread.", "hidden_truth": "potassium bromate"},
+    "brominated vegetable oil": {"grade": "F", "reason": "BANNED in EU, Japan, India. Builds up in body tissue. FDA finally banned 2024."},
+    "azodicarbonamide": {"grade": "F", "reason": "BANNED in EU, Australia. Breaks down to carcinogenic semicarbazide. Used in US bread."},
+    "red 3": {"grade": "F", "reason": "FDA acknowledged carcinogen in 1990. BANNED in cosmetics. Still allowed in food."},
+
+    # Known Endocrine Disruptors
+    "bha": {"grade": "F", "reason": "IARC Group 2B carcinogen. BANNED in EU for infant food. Endocrine disruptor."},
+    "butylated hydroxyanisole": {"grade": "F", "reason": "IARC Group 2B carcinogen. BANNED in EU for infant food."},
+    "bht": {"grade": "F", "reason": "Potential carcinogen. Banned in UK, Japan, Romania. Linked to behavioral issues in children."},
+    "butylated hydroxytoluene": {"grade": "F", "reason": "Potential carcinogen. Banned in UK, Japan, Romania."},
+
+    # Trans Fats
+    "partially hydrogenated": {"grade": "F", "reason": "Artificial trans fat. No safe level. FDA banned 2018 but loopholes remain."},
+}
+
+# TIER 2: 🟠 ORANGE (Grade D) - LIMIT
+TIER_2_LIMIT = {
+    # IARC Group 2B
+    "aspartame": {"grade": "D", "reason": "IARC classified as 'possibly carcinogenic' July 2023"},
+    "red 40": {"grade": "D", "reason": "Requires warning label in EU. Linked to hyperactivity in children."},
+    "allura red": {"grade": "D", "reason": "Same as Red 40. Requires warning label in EU."},
+    "yellow 5": {"grade": "D", "reason": "Requires warning label in EU. Contains benzidine (carcinogen)."},
+    "tartrazine": {"grade": "D", "reason": "Same as Yellow 5. Requires warning label in EU."},
+    "yellow 6": {"grade": "D", "reason": "Requires warning label in EU. Linked to adrenal tumors."},
+    "sunset yellow": {"grade": "D", "reason": "Same as Yellow 6. Requires warning label in EU."},
+    "caramel color": {"grade": "D", "reason": "Class IV caramel contains 4-MEI, linked to cancer in animal studies."},
+
+    # GRAS Exploited
+    "titanium dioxide": {"grade": "D", "reason": "BANNED in EU food since 2022. Still allowed in US. DNA damage concerns."},
+    "propylparaben": {"grade": "D", "reason": "Endocrine disruptor. BANNED in EU food. Still in US products."},
+
+    # Processing Markers
+    "high fructose corn syrup": {"grade": "D", "reason": "Ultra-processed marker. Linked to obesity, diabetes, fatty liver."},
+    "hfcs": {"grade": "D", "reason": "Ultra-processed marker. Linked to obesity, diabetes, fatty liver."},
+    "maltodextrin": {"grade": "D", "reason": "High glycemic (105-136). Spikes blood sugar faster than table sugar."},
+    "dextrose": {"grade": "D", "reason": "Industrial corn sugar. Glycemic index of 100."},
+
+    # Problematic Additives
+    "carrageenan": {"grade": "D", "reason": "Inflammatory. May cause gastrointestinal issues. Some countries restrict."},
+    "sodium benzoate": {"grade": "D", "reason": "Can form benzene (carcinogen) when combined with vitamin C."},
+    "polysorbate 80": {"grade": "D", "reason": "Emulsifier linked to gut microbiome disruption and inflammation."},
+    "tbhq": {"grade": "D", "reason": "Petroleum-based preservative. Possible carcinogen. Banned in Japan and some EU countries."},
+    "tertiary butylhydroquinone": {"grade": "D", "reason": "Petroleum-based preservative. Vision problems, DNA damage in studies."},
+}
+
+# TIER 3: 🟡 YELLOW (Grade C) - CAUTION
+TIER_3_CAUTION = {
+    "palm oil": {"grade": "C", "reason": "High saturated fat. Major deforestation driver. Often from unethical sources."},
+    "soybean oil": {"grade": "C", "reason": "Usually from GMO industrial farms. High omega-6 (inflammatory)."},
+    "corn syrup": {"grade": "C", "reason": "Refined sugar from industrial corn. Empty calories."},
+    "modified food starch": {"grade": "C", "reason": "Ultra-processed. Often from GMO corn. May contain processing chemicals."},
+    "modified starch": {"grade": "C", "reason": "Ultra-processed. Often from GMO corn. May contain processing chemicals."},
+    "mono and diglycerides": {"grade": "C", "reason": "May contain trans fats. Loophole in trans fat labeling."},
+    "monoglycerides": {"grade": "C", "reason": "May contain trans fats. Loophole in trans fat labeling."},
+    "diglycerides": {"grade": "C", "reason": "May contain trans fats. Loophole in trans fat labeling."},
+    "soy lecithin": {"grade": "C", "reason": "Usually GMO. Highly processed extraction."},
+    "citric acid": {"grade": "C", "reason": "Usually manufactured from GMO corn mold, not citrus."},
+    "xanthan gum": {"grade": "C", "reason": "May cause digestive issues in some people."},
+    "natural flavors": {"grade": "C", "reason": "Can contain up to 100 different chemicals, undisclosed", "hidden_truth": "natural_flavors"},
+    "artificial flavors": {"grade": "C", "reason": "Synthetic chemicals, undisclosed components"},
+    "msg": {"grade": "C", "reason": "Flavor enhancer. Headaches in sensitive individuals, allergies."},
+    "monosodium glutamate": {"grade": "C", "reason": "Flavor enhancer. Headaches in sensitive individuals, allergies."},
+}
+
+# TIER 4: 🟢 GREEN (Grade A/B) - SAFE
+TIER_4_SAFE = {
+    # Whole Foods
+    "whole wheat flour": {"grade": "A", "reason": "Minimally processed whole grain."},
+    "whole grain": {"grade": "A", "reason": "Minimally processed, nutrient-rich."},
+    "olive oil": {"grade": "A", "reason": "Heart-healthy monounsaturated fats."},
+    "butter": {"grade": "B", "reason": "Natural dairy fat. Better than processed alternatives."},
+    "sea salt": {"grade": "B", "reason": "Minimally processed. Contains trace minerals."},
+    "salt": {"grade": "B", "reason": "Minimal processing."},
+    "cane sugar": {"grade": "B", "reason": "Less processed than HFCS. Use in moderation."},
+    "water": {"grade": "A", "reason": "Essential, no concerns."},
+    "aqua": {"grade": "A", "reason": "Essential, no concerns."},
+
+    # Certified
+    "organic": {"grade": "A", "bonus": True, "reason": "No synthetic pesticides. Better farming practices."},
+    "non-gmo verified": {"grade": "A", "bonus": True, "reason": "Verified non-GMO."},
+    "non-gmo": {"grade": "A", "bonus": True, "reason": "Non-GMO."},
+    "fair trade": {"grade": "A", "bonus": True, "reason": "Ethical sourcing verified."},
+    "usda organic": {"grade": "A", "bonus": True, "reason": "Certified organic, no synthetic pesticides."},
+
+    # Safe Ingredients
+    "glycerin": {"grade": "A", "reason": "Safe, natural humectant."},
+    "vegetable glycerin": {"grade": "A", "reason": "Safe, natural humectant."},
+    "vitamin e": {"grade": "A", "reason": "Antioxidant, beneficial."},
+    "tocopherol": {"grade": "A", "reason": "Vitamin E, antioxidant."},
+    "baking soda": {"grade": "A", "reason": "Safe, natural."},
+    "sodium bicarbonate": {"grade": "A", "reason": "Safe, natural."},
+    "vinegar": {"grade": "A", "reason": "Safe, natural preservative."},
+    "acetic acid": {"grade": "B", "reason": "Safe, natural acid."},
+}
+
+# ============================================
+# V4 CORPORATE PENALTIES DATABASE
+# ============================================
+
+CORPORATE_PENALTIES = {
+    "Nestlé": {
+        "penalty": -15,
+        "brands": ["Gerber", "DiGiorno", "Stouffer's", "Hot Pockets", "Lean Cuisine",
+                   "Coffee-Mate", "Carnation", "Häagen-Dazs", "Dreyer's", "Nestle"],
+        "issues": [
+            "Baby formula marketing violations (WHO code)",
+            "Child labor in cocoa supply chain",
+            "Water extraction from drought areas",
+            "Microplastics contamination scandals"
+        ]
+    },
+    "PepsiCo": {
+        "penalty": -12,
+        "brands": ["Quaker", "Frito-Lay", "Tropicana", "Gatorade", "Naked Juice",
+                   "Sabra", "Siete Foods", "Poppi", "Pepsi", "Lay's", "Doritos"],
+        "issues": [
+            "$9M settlement for 'all natural' GMO fraud (Naked Juice)",
+            "Lobbying against soda taxes",
+            "Plastic pollution (4th worst polluter globally)"
+        ]
+    },
+    "Kraft Heinz": {
+        "penalty": -12,
+        "brands": ["Oscar Mayer", "Lunchables", "Velveeta", "Philadelphia",
+                   "Jell-O", "Kool-Aid", "Maxwell House", "Capri Sun", "Kraft", "Heinz"],
+        "issues": [
+            "Named in SF lawsuit (Dec 2025) for 'tobacco playbook' tactics",
+            "Heavy lobbying against food safety regulations",
+            "Ultra-processed foods marketed to children"
+        ]
+    },
+    "General Mills": {
+        "penalty": -10,
+        "brands": ["Annie's", "Cascadian Farm", "Lärabar", "Nature Valley",
+                   "Cheerios", "Lucky Charms", "Yoplait", "Häagen-Dazs"],
+        "issues": [
+            "Glyphosate residues in Cheerios products",
+            "Owns 'healthy' brands while selling sugary cereals",
+            "Lobbied against GMO labeling"
+        ]
+    },
+    "Kellogg's": {
+        "penalty": -10,
+        "brands": ["Kashi", "MorningStar Farms", "Bear Naked", "RXBar",
+                   "Pringles", "Cheez-It", "Pop-Tarts", "Eggo", "Kellogg"],
+        "issues": [
+            "Named in SF lawsuit for ultra-processed foods",
+            "Bought 'healthy' brands to capture health-conscious consumers",
+            "High sugar products marketed with health claims"
+        ]
+    },
+    "Mars": {
+        "penalty": -10,
+        "brands": ["M&M's", "Snickers", "Skittles", "Twix", "Uncle Ben's",
+                   "Pedigree", "Whiskas", "Mars"],
+        "issues": [
+            "Named in SF lawsuit",
+            "Child labor in cocoa supply chain",
+            "Artificial dyes with EU warning requirements"
+        ]
+    },
+    "Mondelez": {
+        "penalty": -10,
+        "brands": ["Oreo", "Chips Ahoy", "Ritz", "Triscuit", "Wheat Thins",
+                   "Cadbury", "Toblerone", "Philadelphia"],
+        "issues": [
+            "Named in SF lawsuit",
+            "Spun off from Kraft to avoid US regulations",
+            "Child labor in cocoa supply chain"
+        ]
+    },
+    "Coca-Cola": {
+        "penalty": -12,
+        "brands": ["Minute Maid", "Simply", "Honest Tea", "vitaminwater",
+                   "Fairlife", "Topo Chico", "Costa Coffee", "Coca-Cola", "Coke"],
+        "issues": [
+            "Named in SF lawsuit",
+            "$7M+ annual lobbying",
+            "Deceptive marketing of 'vitamin' water (settled lawsuit)",
+            "Plastic pollution (world's #1 polluter)"
+        ]
+    },
+    "ConAgra": {
+        "penalty": -10,
+        "brands": ["Healthy Choice", "Marie Callender's", "Hunt's", "PAM",
+                   "Slim Jim", "Chef Boyardee", "Banquet", "ConAgra"],
+        "issues": [
+            "Named in SF lawsuit",
+            "Ironic naming of 'Healthy Choice' ultra-processed meals",
+            "Lobbied against country of origin labeling"
+        ]
+    },
+    "Unilever": {
+        "penalty": -8,
+        "brands": ["Ben & Jerry's", "Hellmann's", "Knorr", "Lipton",
+                   "Breyers", "Magnum", "Talenti", "Unilever"],
+        "issues": [
+            "Palm oil sourcing controversies",
+            "Owns ethical brands while selling processed foods",
+            "Deforestation supply chain links"
+        ]
+    },
+}
+
+# ============================================
+# V4 NOVA ULTRA-PROCESSING MARKERS
+# ============================================
+
+NOVA_4_MARKERS = [
+    "high fructose corn syrup",
+    "hfcs",
+    "maltodextrin",
+    "hydrogenated",
+    "partially hydrogenated",
+    "isolated protein",
+    "modified starch",
+    "modified food starch",
+    "interesterified",
+    "hydrolysed",
+    "hydrolyzed",
+    "artificial flavor",
+    "natural flavor",  # Often masks ultra-processing
+    "emulsifier",
+    "humectant",
+    "flavor enhancer",
+    "colors",
+    "dyes",
+    "artificial color",
+    "anti-caking",
+    "bulking agent",
+    "carbonating",
+    "foaming",
+    "gelling agent",
+    "glazing agent",
+]
+
+# ============================================
+# V4 HIDDEN TRUTHS DATABASE
+# ============================================
+
+HIDDEN_TRUTHS = {
+    "ractopamine": """
+🚨 HIDDEN TRUTH: Ractopamine is a growth drug fed to 60-80% of American pigs to add
+lean muscle quickly before slaughter. It's BANNED in 168 countries including the
+entire European Union, China, Taiwan, and Russia due to cardiovascular risks.
+The US allows it because Elanco (manufacturer) lobbied successfully. When you
+buy conventional pork products, you're likely consuming residues of a drug most
+of the world considers too dangerous for food animals.
+    """,
+
+    "potassium bromate": """
+🚨 HIDDEN TRUTH: Potassium bromate makes bread rise higher and look whiter.
+It's classified as a Group 2B carcinogen (possibly carcinogenic to humans) by
+the World Health Organization. It's BANNED in the EU, UK, Canada, Brazil,
+China, and Japan. California requires cancer warnings on products containing it.
+The FDA asked bakers to "voluntarily" stop using it in 1991 - but never banned it.
+    """,
+
+    "GRAS_unknown": """
+⚠️ HIDDEN TRUTH: This ingredient was likely self-certified as "safe" by the
+manufacturer through the GRAS loophole. Since 2000, 98.7% of new food chemicals
+were approved this way - WITHOUT FDA review. Companies hire their own experts
+to rubber-stamp safety. The FDA has no idea what's in most processed foods.
+    """,
+
+    "natural_flavors": """
+⚠️ HIDDEN TRUTH: "Natural flavors" can contain up to 100 different chemicals.
+Companies don't have to disclose what's in them. They may include solvents,
+emulsifiers, and preservatives. "Natural" doesn't mean safe - arsenic is natural too.
+The only difference from "artificial flavors" is the original source material.
+    """,
+}
+
+# Ultra-Processing Truth (shown when 5+ NOVA markers detected)
+ULTRA_PROCESSED_TRUTH = """
+🏭 ULTRA-PROCESSED FOOD ALERT
+
+This product contains {count} ultra-processing markers.
+
+📊 THE SCIENCE: A 2019 NIH study locked 20 people in a metabolic ward
+and fed them ultra-processed OR unprocessed diets with IDENTICAL calories,
+sugar, fat, and nutrients. Result: Ultra-processed group ate 508 MORE
+calories per day and gained 2 pounds in 2 weeks. The unprocessed group
+lost 2 pounds.
+
+🧠 WHY IT MATTERS: Ultra-processed foods are engineered to override
+your brain's satiety signals. They're designed to be addictive. This
+isn't about willpower - it's about food engineering.
+
+📈 HEALTH RISKS LINKED TO ULTRA-PROCESSED FOODS:
+• 12-29% increased cancer risk
+• 62% increased mortality risk
+• 50% increased depression risk
+• 15% increased diabetes risk
+
+These effects occur REGARDLESS of individual ingredient toxicity.
+"""
+
+# Monoculture Truth (shown when 3+ monoculture ingredients detected)
+MONOCULTURE_TRUTH = """
+🌾 INDUSTRIAL AGRICULTURE ALERT
+
+This product likely contains ingredients from industrial monoculture farms.
+
+WHY THIS MATTERS:
+• Monocultures destroy biodiversity
+• Force small farmers to grow single crops
+• Concentrate wealth in mega-corporations
+• Deplete soil nutrients
+• Require massive pesticide use
+• Often located near low-income communities (environmental racism)
+
+COMMON MONOCULTURE INGREDIENTS:
+• Corn (syrup, starch, oil, dextrose, maltodextrin)
+• Soy (lecithin, oil, protein isolate)
+• Palm oil (linked to rainforest destruction)
+
+🌱 BETTER CHOICE: Look for products with:
+• USDA Organic certification
+• Fair Trade certification
+• "Single origin" or named farm sources
+• B-Corp certified companies
+"""
+
+# ============================================
 # FASTAPI APP
 # ============================================
 
@@ -877,6 +1215,251 @@ def apply_condition_modifier(score: int, condition: Dict, product_type: str) -> 
 
 
 # ============================================
+# V4 SCORING FUNCTIONS
+# ============================================
+
+def calculate_v4_score(product_data: dict) -> dict:
+    """
+    TrueCancer V4 Scoring Algorithm
+
+    4-Dimension Scoring:
+    - Ingredient Safety: 40% weight
+    - Processing Level: 25% weight
+    - Corporate Ethics: 20% weight
+    - Supply Chain: 15% weight
+
+    Args:
+        product_data: Dict with 'ingredients', 'brand', etc.
+
+    Returns:
+        {
+            "overall_score": 0-100,
+            "overall_grade": "A+" to "F",
+            "dimension_scores": {...},
+            "ingredients_graded": [...],
+            "alerts": [],
+            "hidden_truths": []
+        }
+    """
+
+    base_score = 75  # Start neutral
+    ingredients = product_data.get("ingredients", [])
+    brand = product_data.get("brand", "").lower()
+
+    # ========== 1. INGREDIENT SAFETY (40% weight) ==========
+    ingredient_scores = []
+    ingredients_graded = []
+    alerts = []
+    hidden_truths = []
+
+    for ingredient in ingredients:
+        ing_lower = ingredient.lower()
+        ingredient_data = None
+        grade = "C"  # Default unknown
+        score = 60
+        reason = "Unknown - not in safety database. May have bypassed FDA review via GRAS loophole."
+        color = "#facc15"  # Yellow
+        hidden_truth_key = "GRAS_unknown"
+
+        # Check Tier 1 (F grade, red)
+        for key, data in TIER_1_AVOID.items():
+            if key in ing_lower:
+                grade = "F"
+                score = 0
+                reason = data["reason"]
+                color = "#ef4444"
+                hidden_truth_key = data.get("hidden_truth")
+                alerts.append(f"🔴 AVOID: {ingredient}")
+                ingredient_data = data
+                break
+
+        # Check Tier 2 (D grade, orange) if not already matched
+        if not ingredient_data:
+            for key, data in TIER_2_LIMIT.items():
+                if key in ing_lower:
+                    grade = "D"
+                    score = 35
+                    reason = data["reason"]
+                    color = "#f97316"
+                    alerts.append(f"🟠 LIMIT: {ingredient}")
+                    ingredient_data = data
+                    hidden_truth_key = None
+                    break
+
+        # Check Tier 3 (C grade, yellow) if not already matched
+        if not ingredient_data:
+            for key, data in TIER_3_CAUTION.items():
+                if key in ing_lower:
+                    grade = "C"
+                    score = 55
+                    reason = data["reason"]
+                    color = "#facc15"
+                    hidden_truth_key = data.get("hidden_truth")
+                    ingredient_data = data
+                    break
+
+        # Check Tier 4 (A/B grade, green) if not already matched
+        if not ingredient_data:
+            for key, data in TIER_4_SAFE.items():
+                if key in ing_lower:
+                    grade = data["grade"]
+                    score = 95 if grade == "A" else 80
+                    reason = data["reason"]
+                    color = "#22c55e" if grade == "A" else "#4ade80"
+                    ingredient_data = data
+                    hidden_truth_key = None
+                    break
+
+        # Add hidden truth if applicable
+        if hidden_truth_key and hidden_truth_key in HIDDEN_TRUTHS:
+            if HIDDEN_TRUTHS[hidden_truth_key] not in hidden_truths:
+                hidden_truths.append(HIDDEN_TRUTHS[hidden_truth_key])
+
+        ingredient_scores.append(score)
+        ingredients_graded.append({
+            "name": ingredient,
+            "grade": grade,
+            "color": color,
+            "reason": reason,
+            "is_bonus": ingredient_data.get("bonus", False) if ingredient_data else False
+        })
+
+    # Sort ingredients worst-first (F → D → C → B → A)
+    grade_order = {"F": 0, "D": 1, "C": 2, "B": 3, "A": 4}
+    ingredients_graded.sort(key=lambda x: grade_order.get(x["grade"], 2))
+
+    # Calculate ingredient safety score
+    if ingredient_scores:
+        ingredient_safety_score = sum(ingredient_scores) / len(ingredient_scores)
+    else:
+        ingredient_safety_score = 50
+
+    # ========== 2. PROCESSING LEVEL (25% weight) ==========
+    nova_markers_found = 0
+    for ing in ingredients:
+        ing_lower = ing.lower()
+        for marker in NOVA_4_MARKERS:
+            if marker in ing_lower:
+                nova_markers_found += 1
+                break  # Count each ingredient once
+
+    if nova_markers_found >= 5:
+        processing_score = 20  # Ultra-processed
+        hidden_truths.append(ULTRA_PROCESSED_TRUTH.format(count=nova_markers_found))
+        alerts.append(f"🏭 ULTRA-PROCESSED: {nova_markers_found} processing markers detected")
+    elif nova_markers_found >= 3:
+        processing_score = 40
+        alerts.append(f"⚠️ HIGHLY PROCESSED: {nova_markers_found} processing markers")
+    elif nova_markers_found >= 1:
+        processing_score = 60
+    else:
+        processing_score = 90  # Minimally processed
+
+    # ========== 3. CORPORATE ETHICS (20% weight) ==========
+    corporate_score = 70  # Default
+    parent_company = None
+
+    for parent, data in CORPORATE_PENALTIES.items():
+        # Check if brand matches any of the parent company's brands
+        if any(b.lower() in brand for b in data["brands"]):
+            corporate_score = 70 + data["penalty"]  # Apply penalty
+            parent_company = parent
+            alerts.append(f"📍 OWNED BY: {parent}")
+
+            # Add corporate truth
+            issues_text = "\n".join(f"• {issue}" for issue in data["issues"])
+            corporate_truth = f"""
+📍 CORPORATE OWNERSHIP ALERT
+
+{product_data.get('brand', 'This product')} is owned by {parent}.
+
+Parent company issues:
+{issues_text}
+
+💡 DID YOU KNOW?
+{parent} also makes many ultra-processed products while marketing "healthy" options.
+The same company profits from both ends of the spectrum.
+            """
+            hidden_truths.append(corporate_truth)
+            break
+
+    # Ensure score stays in 0-100 range
+    corporate_score = max(0, min(100, corporate_score))
+
+    # ========== 4. SUPPLY CHAIN (15% weight) ==========
+    supply_chain_score = 50  # Default unknown
+
+    # Check for positive certifications
+    product_str = str(product_data).lower()
+    for cert in ["organic", "fair trade", "non-gmo", "rainforest alliance", "b-corp", "usda organic"]:
+        if cert in product_str:
+            supply_chain_score += 10
+
+    # Check for monoculture ingredients
+    monoculture_keywords = ["corn", "soy", "palm", "canola"]
+    monoculture_count = 0
+    for ing in ingredients:
+        ing_lower = ing.lower()
+        for keyword in monoculture_keywords:
+            if keyword in ing_lower:
+                monoculture_count += 1
+                break  # Count each ingredient once
+
+    if monoculture_count >= 3:
+        supply_chain_score -= 15
+        hidden_truths.append(MONOCULTURE_TRUTH)
+        alerts.append(f"🌾 MONOCULTURE ALERT: {monoculture_count} industrial ingredients")
+
+    supply_chain_score = max(0, min(100, supply_chain_score))
+
+    # ========== CALCULATE OVERALL SCORE ==========
+    overall_score = (
+        ingredient_safety_score * 0.40 +
+        processing_score * 0.25 +
+        corporate_score * 0.20 +
+        supply_chain_score * 0.15
+    )
+
+    # Apply score cap for F-grade ingredients
+    has_f_grade = any(ing["grade"] == "F" for ing in ingredients_graded)
+    if has_f_grade:
+        overall_score = min(overall_score, 49)  # Cannot be better than D
+        if f"⚖️ SCORE CAPPED: Product cannot score above D due to F-grade ingredients" not in alerts:
+            alerts.append("⚖️ SCORE CAPPED: Product cannot score above D due to F-grade ingredients")
+
+    overall_score = max(0, min(100, round(overall_score)))
+
+    # ========== DETERMINE GRADE ==========
+    if overall_score >= 95:
+        grade = "A+"
+    elif overall_score >= 85:
+        grade = "A"
+    elif overall_score >= 70:
+        grade = "B"
+    elif overall_score >= 50:
+        grade = "C"
+    elif overall_score >= 30:
+        grade = "D"
+    else:
+        grade = "F"
+
+    return {
+        "overall_score": overall_score,
+        "overall_grade": grade,
+        "dimension_scores": {
+            "ingredient_safety": round(ingredient_safety_score),
+            "processing_level": round(processing_score),
+            "corporate_ethics": round(corporate_score),
+            "supply_chain": round(supply_chain_score)
+        },
+        "ingredients_graded": ingredients_graded,
+        "alerts": alerts,
+        "hidden_truths": hidden_truths,
+        "parent_company": parent_company
+    }
+
+
+# ============================================
 # API ENDPOINTS
 # ============================================
 
@@ -1112,6 +1695,156 @@ async def scan_product_base64(data: dict):
         "report_id": report_id,
         "timestamp": datetime.now().isoformat()
     }
+
+
+# ============================================
+# V4 SCAN ENDPOINT
+# ============================================
+
+@app.post("/api/v4/scan")
+async def scan_product_v4(image: UploadFile = File(...)):
+    """
+    V4 Product Safety Scanner with 4-Dimension Scoring
+
+    Consumer-protective scoring with:
+    - Ingredient Safety (40%)
+    - Processing Level (25%)
+    - Corporate Ethics (20%)
+    - Supply Chain (15%)
+
+    Returns hidden truths, corporate ownership, and tiered ingredient grading.
+    """
+
+    # Validate content type
+    allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
+    if image.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid image type: {image.content_type}. Allowed: {', '.join(allowed_types)}"
+        )
+
+    try:
+        # Read and encode image
+        image_data = await image.read()
+        image_base64 = base64.b64encode(image_data).decode('utf-8')
+
+        # Enhanced V4 prompt for Claude Vision
+        v4_prompt = """Analyze this product image and extract the following information:
+
+1. Product name
+2. Brand name
+3. Complete ingredients list (if visible)
+4. Product category (food, water, cosmetics, cookware, cleaning, supplements, other)
+
+Focus on reading all ingredient text clearly. Look for:
+- Main ingredient panel
+- "Contains:" statements
+- Allergen warnings
+- Material composition (for non-food items)
+
+Return ONLY a JSON object with this exact structure:
+{
+    "product_name": "Exact product name",
+    "brand": "Brand name",
+    "category": "food/water/cosmetics/cookware/cleaning/supplements/other",
+    "ingredients": ["ingredient1", "ingredient2", ...],
+    "confidence": "high/medium/low"
+}"""
+
+        # Call Claude Vision API
+        message = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2048,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": image.content_type,
+                                "data": image_base64,
+                            },
+                        },
+                        {
+                            "type": "text",
+                            "text": v4_prompt
+                        }
+                    ],
+                }
+            ],
+        )
+
+        # Parse Claude's response
+        response_text = message.content[0].text
+
+        # Extract JSON from response
+        try:
+            # Try to find JSON in the response
+            json_start = response_text.find('{')
+            json_end = response_text.rfind('}') + 1
+            if json_start != -1 and json_end > json_start:
+                json_str = response_text[json_start:json_end]
+                analysis = json.loads(json_str)
+            else:
+                raise ValueError("No JSON found in response")
+        except (json.JSONDecodeError, ValueError) as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to parse AI response: {str(e)}"
+            )
+
+        # Prepare product data for V4 scoring
+        product_data = {
+            "product_name": analysis.get("product_name", "Unknown Product"),
+            "brand": analysis.get("brand", "Unknown Brand"),
+            "category": analysis.get("category", "other"),
+            "ingredients": analysis.get("ingredients", []),
+            "confidence": analysis.get("confidence", "medium")
+        }
+
+        # Calculate V4 score
+        v4_results = calculate_v4_score(product_data)
+
+        # Generate unique report ID
+        report_id = f"V4-{datetime.now().strftime('%Y%m%d%H%M%S')}-{os.urandom(4).hex().upper()}"
+
+        # Build response
+        response = {
+            "success": True,
+            "version": "4.0.0",
+            "product_name": product_data["product_name"],
+            "brand": product_data["brand"],
+            "category": product_data["category"],
+            "ingredients": product_data["ingredients"],
+            "confidence": product_data["confidence"],
+
+            # V4 Scoring
+            "overall_score": v4_results["overall_score"],
+            "overall_grade": v4_results["overall_grade"],
+            "dimension_scores": v4_results["dimension_scores"],
+
+            # Tiered Ingredients (sorted worst-first)
+            "ingredients_graded": v4_results["ingredients_graded"],
+
+            # Consumer Protection
+            "alerts": v4_results["alerts"],
+            "hidden_truths": v4_results["hidden_truths"],
+            "parent_company": v4_results.get("parent_company"),
+
+            # Metadata
+            "report_id": report_id,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        return response
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"V4 scan error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 
 
 @app.get("/api/v1/ingredient/{ingredient_name}")
