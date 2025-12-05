@@ -22,6 +22,9 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import anthropic
 
+# V3 Modular Prompts
+from prompts import build_prompt
+
 # ============================================
 # CONFIGURATION
 # ============================================
@@ -887,13 +890,16 @@ async def health_check():
     }
 
 
-@app.get("/health", response_model=HealthCheck)
+@app.get("/health")
 async def health():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "3.1.0",
-        "claude_api": "connected" if client else "not configured"
+        "version": "3.0.0",
+        "v3_ready": True,
+        "claude_api": "connected" if client else "not configured",
+        "modular_prompts": True,
+        "categories": ["food", "water", "cosmetics", "cookware", "cleaning", "supplements"]
     }
 
 
@@ -1165,6 +1171,122 @@ async def database_stats():
         "low_hazard_count": sum(1 for d in TOXICITY_DATABASE.values() if d["score"] < 4),
         "total_materials": len(MATERIAL_DATABASE)
     }
+
+
+# ============================================
+# V3 API ENDPOINT
+# ============================================
+
+@app.post("/api/v3/scan")
+async def scan_product_v3(image: UploadFile = File(...)):
+    """
+    V3 Product Safety Scanner with Modular Prompts
+
+    Paradigm shift: 95% ingredient-focused, 5% condition-focused
+    Uses category-specific modules for specialized analysis
+    """
+
+    if not client:
+        raise HTTPException(status_code=500, detail="Anthropic API key not configured")
+
+    try:
+        # Validate content type
+        if not image.content_type or not image.content_type.startswith('image/'):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid file type. Expected image/*, got {image.content_type}"
+            )
+
+        # Read and encode image
+        image_bytes = await image.read()
+        image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+
+        # Step 1: Use modular prompt (default to 'food' for Phase 1)
+        # TODO: Implement type detection in future
+        product_type = "food"
+        full_prompt = build_prompt(product_type)
+
+        # Step 2: Single Claude API call with modular prompt
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image",
+                            "source": {
+                                "type": "base64",
+                                "media_type": image.content_type,
+                                "data": image_base64
+                            }
+                        },
+                        {
+                            "type": "text",
+                            "text": full_prompt
+                        }
+                    ]
+                }
+            ]
+        )
+
+        # Step 3: Parse Claude's response
+        analysis_text = response.content[0].text
+
+        # Extract JSON from response (Claude may wrap in markdown)
+        if "```json" in analysis_text:
+            json_start = analysis_text.find("```json") + 7
+            json_end = analysis_text.find("```", json_start)
+            analysis_text = analysis_text[json_start:json_end].strip()
+        elif "```" in analysis_text:
+            # Handle plain ``` without json
+            json_start = analysis_text.find("```") + 3
+            json_end = analysis_text.find("```", json_start)
+            analysis_text = analysis_text[json_start:json_end].strip()
+
+        claude_analysis = json.loads(analysis_text)
+
+        # Step 4: Enrich ingredients with database
+        if 'ingredients' in claude_analysis and 'analysis' in claude_analysis['ingredients']:
+            enriched_ingredients = enrich_ingredients_with_database(
+                claude_analysis['ingredients']['analysis']
+            )
+            claude_analysis['ingredients']['analysis'] = enriched_ingredients
+
+            # Recalculate scores with enriched data
+            scoring_result = calculate_ingredient_scores(enriched_ingredients)
+
+            # Apply positive bonuses
+            safety_with_bonuses = apply_positive_bonuses(
+                scoring_result['safety_score'],
+                claude_analysis.get('positive_attributes', [])
+            )
+
+            # Apply condition modifier
+            final_score = apply_condition_modifier(
+                safety_with_bonuses,
+                claude_analysis.get('condition', {'score': 100}),
+                claude_analysis.get('product_type', 'food')
+            )
+
+            # Update scores in response
+            claude_analysis['safety_score'] = scoring_result['safety_score']
+            claude_analysis['overall_score'] = final_score
+
+            # Calculate grade
+            claude_analysis['grade'] = calculate_grade(final_score)
+
+        # Add success flag
+        claude_analysis['success'] = True
+
+        # Return V3 response
+        return claude_analysis
+
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 
 # ============================================
