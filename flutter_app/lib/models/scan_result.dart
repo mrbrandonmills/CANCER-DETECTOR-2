@@ -26,6 +26,18 @@ class ScanResult {
   final String? error;
   final DateTime scannedAt;
 
+  // V3: Enhanced ingredients structure
+  final IngredientsData? ingredientsData;
+
+  // V3: Positive attributes with bonuses
+  final List<PositiveAttribute>? positiveAttributes;
+
+  // V3: Enhanced condition with weight percentage
+  final ConditionDataV3? conditionV3;
+
+  // V3: Expiration tracking
+  final ExpirationData? expiration;
+
   ScanResult({
     required this.success,
     this.productName,
@@ -51,6 +63,10 @@ class ScanResult {
     this.timestamp,
     this.error,
     DateTime? scannedAt,
+    this.ingredientsData,
+    this.positiveAttributes,
+    this.conditionV3,
+    this.expiration,
   }) : scannedAt = scannedAt ?? DateTime.now();
 
   factory ScanResult.fromJson(Map<String, dynamic> json) {
@@ -105,6 +121,53 @@ class ScanResult {
     return ScanResult(
       success: false,
       error: message,
+    );
+  }
+
+  factory ScanResult.fromJsonV3(Map<String, dynamic> json) {
+    return ScanResult(
+      success: json['success'] as bool? ?? false,
+      productName: json['product_name'] as String?,
+      brand: json['brand'] as String?,
+      productType: json['product_type'] as String?,
+
+      // V3: Parse enhanced ingredients
+      ingredientsData: json['ingredients'] != null
+          ? IngredientsData.fromJson(json['ingredients'])
+          : null,
+
+      // V3: Parse positive attributes
+      positiveAttributes: json['positive_attributes'] != null
+          ? (json['positive_attributes'] as List)
+              .map((item) => PositiveAttribute.fromJson(item))
+              .toList()
+          : null,
+
+      // V3: Parse enhanced condition
+      conditionV3: json['condition'] != null
+          ? ConditionDataV3.fromJson(json['condition'])
+          : null,
+
+      // V3: Parse expiration
+      expiration: json['expiration'] != null
+          ? ExpirationData.fromJson(json['expiration'])
+          : null,
+
+      safetyScore: json['safety_score'] as int?,
+      conditionScore: json['condition_score'] as int?,
+      overallScore: json['overall_score'] as int?,
+      grade: json['grade'] as String?,
+
+      // Safer alternative (V3 compatible)
+      saferAlternative: json['safer_alternative'] != null
+          ? SaferAlternative.fromJson(json['safer_alternative'])
+          : null,
+
+      confidence: json['confidence'] as String?,
+      analysisType: json['analysis_type'] as String?,
+      reportId: json['report_id'] as String?,
+      timestamp: json['timestamp'] as String?,
+      error: json['error'] as String?,
     );
   }
 
@@ -398,8 +461,8 @@ class SaferAlternative {
 
   factory SaferAlternative.fromJson(Map<String, dynamic> json) {
     return SaferAlternative(
-      name: json['name'] ?? '',
-      reason: json['reason'] ?? '',
+      name: json['name'] ?? json['suggestion'] ?? '',
+      reason: json['reason'] ?? json['why'] ?? '',
       grade: json['grade'] ?? '',
       score: json['score'] ?? 0,
     );
@@ -412,5 +475,224 @@ class SaferAlternative {
       'grade': grade,
       'score': score,
     };
+  }
+}
+
+// V3 Data Models
+
+class IngredientsData {
+  final List<IngredientAnalysis> analysis;
+  final double averageHazardScore;
+  final int totalCount;
+
+  IngredientsData({
+    required this.analysis,
+    required this.averageHazardScore,
+    required this.totalCount,
+  });
+
+  factory IngredientsData.fromJson(Map<String, dynamic> json) {
+    return IngredientsData(
+      analysis: (json['analysis'] as List)
+          .map((item) => IngredientAnalysis.fromJson(item))
+          .toList(),
+      averageHazardScore: (json['average_hazard_score'] as num).toDouble(),
+      totalCount: json['total_count'] as int,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'analysis': analysis.map((item) => item.toJson()).toList(),
+      'average_hazard_score': averageHazardScore,
+      'total_count': totalCount,
+    };
+  }
+}
+
+class IngredientAnalysis {
+  final String name;
+  final int hazardScore;
+  final String category;
+  final List<String> concerns;
+  final bool isSafe;
+  final String? source; // 'claude' or 'database'
+
+  IngredientAnalysis({
+    required this.name,
+    required this.hazardScore,
+    required this.category,
+    required this.concerns,
+    required this.isSafe,
+    this.source,
+  });
+
+  factory IngredientAnalysis.fromJson(Map<String, dynamic> json) {
+    return IngredientAnalysis(
+      name: json['name'] as String,
+      hazardScore: json['hazard_score'] as int,
+      category: json['category'] as String,
+      concerns: List<String>.from(json['concerns'] ?? []),
+      isSafe: json['is_safe'] as bool,
+      source: json['source'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'name': name,
+      'hazard_score': hazardScore,
+      'category': category,
+      'concerns': concerns,
+      'is_safe': isSafe,
+      'source': source,
+    };
+  }
+
+  Color get hazardColor {
+    if (hazardScore >= 7) return const Color(0xFFef4444); // Red
+    if (hazardScore >= 4) return const Color(0xFFf97316); // Orange
+    return const Color(0xFF10b981); // Green
+  }
+
+  String get hazardLevel {
+    if (hazardScore >= 7) return 'HIGH';
+    if (hazardScore >= 4) return 'MODERATE';
+    return 'SAFE';
+  }
+}
+
+class PositiveAttribute {
+  final String claim;
+  final int bonusPoints;
+  final bool verified;
+
+  PositiveAttribute({
+    required this.claim,
+    required this.bonusPoints,
+    required this.verified,
+  });
+
+  factory PositiveAttribute.fromJson(Map<String, dynamic> json) {
+    return PositiveAttribute(
+      claim: json['claim'] as String,
+      bonusPoints: json['bonus_points'] as int,
+      verified: json['verified'] as bool,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'claim': claim,
+      'bonus_points': bonusPoints,
+      'verified': verified,
+    };
+  }
+}
+
+class ConditionDataV3 {
+  final String rating; // new|good|fair|worn|damaged
+  final int score;
+  final int weightPercentage; // 5 or 15
+  final List<String> concerns;
+
+  ConditionDataV3({
+    required this.rating,
+    required this.score,
+    required this.weightPercentage,
+    required this.concerns,
+  });
+
+  factory ConditionDataV3.fromJson(Map<String, dynamic> json) {
+    return ConditionDataV3(
+      rating: json['rating'] as String,
+      score: json['score'] as int,
+      weightPercentage: json['weight_percentage'] as int,
+      concerns: List<String>.from(json['concerns'] ?? []),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'rating': rating,
+      'score': score,
+      'weight_percentage': weightPercentage,
+      'concerns': concerns,
+    };
+  }
+
+  Color get conditionColor {
+    switch (rating) {
+      case 'new':
+        return const Color(0xFF10b981); // Green
+      case 'good':
+        return const Color(0xFF06b6d4); // Cyan
+      case 'fair':
+        return const Color(0xFFfbbf24); // Yellow
+      case 'worn':
+        return const Color(0xFFf97316); // Orange
+      case 'damaged':
+        return const Color(0xFFef4444); // Red
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String get conditionLabel {
+    return rating.toUpperCase();
+  }
+}
+
+class ExpirationData {
+  final String status; // fresh|expires_soon|expired|not_applicable
+  final bool dateVisible;
+  final String? notes;
+
+  ExpirationData({
+    required this.status,
+    required this.dateVisible,
+    this.notes,
+  });
+
+  factory ExpirationData.fromJson(Map<String, dynamic> json) {
+    return ExpirationData(
+      status: json['status'] as String,
+      dateVisible: json['date_visible'] as bool,
+      notes: json['notes'] as String?,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'status': status,
+      'date_visible': dateVisible,
+      'notes': notes,
+    };
+  }
+
+  Color get statusColor {
+    switch (status) {
+      case 'fresh':
+        return const Color(0xFF10b981); // Green
+      case 'expires_soon':
+        return const Color(0xFFfbbf24); // Yellow
+      case 'expired':
+        return const Color(0xFFef4444); // Red
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String get statusLabel {
+    switch (status) {
+      case 'fresh':
+        return 'FRESH';
+      case 'expires_soon':
+        return 'EXPIRES SOON';
+      case 'expired':
+        return 'EXPIRED';
+      default:
+        return 'N/A';
+    }
   }
 }

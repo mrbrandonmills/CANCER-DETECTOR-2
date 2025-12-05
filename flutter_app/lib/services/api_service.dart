@@ -12,14 +12,72 @@ class ApiService {
   // For local development
   // static const String baseUrl = 'http://localhost:8000';
 
-  /// Scan a product image using the new v3.1.0 endpoint
-  /// Accepts a File and uploads via multipart/form-data
+  /// Scan a product image using the V3 endpoint (default)
+  /// Uses /api/v3/scan with modular prompts and ingredient-focused analysis
   Future<ScanResult> scanImage(File imageFile) async {
+    return scanImageV3(imageFile);
+  }
+
+  /// V3 endpoint: Modular prompts with 95% ingredient-focused scoring
+  /// Accepts a File and uploads via multipart/form-data
+  Future<ScanResult> scanImageV3(File imageFile) async {
     try {
       // Create multipart request
       final request = http.MultipartRequest(
         'POST',
-        Uri.parse('$baseUrl/api/v1/scan'),
+        Uri.parse('$baseUrl/api/v3/scan'), // V3 endpoint
+      );
+
+      // Detect MIME type from file extension
+      final mimeTypeString = lookupMimeType(imageFile.path) ?? 'image/jpeg';
+      final mediaType = MediaType.parse(mimeTypeString);
+
+      // Add image file with explicit contentType
+      request.files.add(await http.MultipartFile.fromPath(
+        'image',
+        imageFile.path,
+        contentType: mediaType,
+      ));
+
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        return ScanResult.fromJsonV3(jsonData); // Use V3 parser
+      } else if (response.statusCode == 400) {
+        // Bad request - try to parse error message
+        try {
+          final jsonData = jsonDecode(response.body);
+          // Check both 'detail' (FastAPI) and 'error' (backwards compatibility)
+          final errorMsg = jsonData['detail'] ?? jsonData['error'] ?? 'Invalid request';
+          return ScanResult.error(errorMsg);
+        } catch (_) {
+          return ScanResult.error('Invalid request: ${response.body}');
+        }
+      } else if (response.statusCode == 500) {
+        return ScanResult.error('Server error. Please try again.');
+      } else {
+        return ScanResult.error('Unexpected error: ${response.statusCode}');
+      }
+    } on SocketException {
+      return ScanResult.error('No internet connection. Please check your network.');
+    } on http.ClientException {
+      return ScanResult.error('Connection failed. Please try again.');
+    } catch (e) {
+      return ScanResult.error('Error: $e');
+    }
+  }
+
+  /// V2 endpoint (kept as fallback): Original analysis endpoint
+  /// Accepts a File and uploads via multipart/form-data
+  Future<ScanResult> scanImageV2(File imageFile) async {
+    try {
+      // Create multipart request
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/api/v1/scan'), // V2 endpoint
       );
 
       // Detect MIME type from file extension
