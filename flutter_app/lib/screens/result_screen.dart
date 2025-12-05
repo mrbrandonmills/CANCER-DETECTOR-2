@@ -39,11 +39,36 @@ class ResultScreen extends StatelessWidget {
 
                 const SizedBox(height: 20),
 
+                // V3 PRIORITY #1: Ingredients Section (moved to top)
+                _buildAnalysisSection(context)
+                    .animate()
+                    .fadeIn(delay: 150.ms),
+
+                const SizedBox(height: 20),
+
+                // V3 PRIORITY #2: Positive Attributes Section (NEW)
+                if (result.positiveAttributes != null && result.positiveAttributes!.isNotEmpty) ...[
+                  _buildPositiveAttributesSection(context)
+                      .animate()
+                      .fadeIn(delay: 200.ms)
+                      .slideY(begin: 0.2),
+                  const SizedBox(height: 20),
+                ],
+
+                // V3 PRIORITY #3: Expiration Status Section (NEW)
+                if (result.expiration != null && result.expiration!.status != 'not_applicable') ...[
+                  _buildExpirationSection(context)
+                      .animate()
+                      .fadeIn(delay: 250.ms)
+                      .slideY(begin: 0.2),
+                  const SizedBox(height: 20),
+                ],
+
                 // Personalized Notes (if present)
                 if (result.personalizedNotes != null) ...[
                   _buildPersonalizedNotes(context)
                       .animate()
-                      .fadeIn(delay: 150.ms)
+                      .fadeIn(delay: 300.ms)
                       .slideY(begin: 0.2),
                   const SizedBox(height: 20),
                 ],
@@ -52,24 +77,8 @@ class ResultScreen extends StatelessWidget {
                 if (result.recommendation != null)
                   _buildRecommendationCard(context)
                       .animate()
-                      .fadeIn(delay: 200.ms)
+                      .fadeIn(delay: 350.ms)
                       .slideY(begin: 0.2),
-
-                const SizedBox(height: 20),
-
-                // Condition Assessment (if present)
-                if (result.condition != null) ...[
-                  _buildConditionCard(context)
-                      .animate()
-                      .fadeIn(delay: 250.ms)
-                      .slideY(begin: 0.2),
-                  const SizedBox(height: 20),
-                ],
-
-                // Analysis Section (Ingredients OR Materials)
-                _buildAnalysisSection(context)
-                    .animate()
-                    .fadeIn(delay: 300.ms),
 
                 const SizedBox(height: 20),
 
@@ -77,23 +86,38 @@ class ResultScreen extends StatelessWidget {
                 if (result.careTips != null && result.careTips!.isNotEmpty) ...[
                   _buildCareTipsSection(context)
                       .animate()
-                      .fadeIn(delay: 350.ms),
+                      .fadeIn(delay: 400.ms),
                   const SizedBox(height: 20),
                 ],
 
-                // Safer Alternative (if present)
+                // V3 PRIORITY #4: Condition Assessment (moved to bottom, before safer alternative)
+                if (result.conditionV3 != null) ...[
+                  _buildConditionCardV3(context)
+                      .animate()
+                      .fadeIn(delay: 450.ms)
+                      .slideY(begin: 0.2),
+                  const SizedBox(height: 20),
+                ] else if (result.condition != null) ...[
+                  _buildConditionCard(context)
+                      .animate()
+                      .fadeIn(delay: 450.ms)
+                      .slideY(begin: 0.2),
+                  const SizedBox(height: 20),
+                ],
+
+                // Safer Alternative (bottom)
                 if (result.saferAlternative != null) ...[
                   _buildSaferAlternative(context)
                       .animate()
-                      .fadeIn(delay: 400.ms)
-                      .shake(delay: 500.ms),
+                      .fadeIn(delay: 500.ms)
+                      .shake(delay: 600.ms),
                   const SizedBox(height: 20),
                 ],
 
                 // Action Buttons
                 _buildActionButtons(context)
                     .animate()
-                    .fadeIn(delay: 450.ms),
+                    .fadeIn(delay: 550.ms),
 
                 const SizedBox(height: 40),
               ]),
@@ -492,6 +516,12 @@ class ResultScreen extends StatelessWidget {
   }
 
   Widget _buildIngredientsAnalysis(BuildContext context) {
+    // V3: Use enhanced ingredients data if available
+    if (result.ingredientsData != null) {
+      return _buildIngredientsAnalysisV3(context);
+    }
+
+    // V2: Fallback to old format
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -569,6 +599,188 @@ class ResultScreen extends StatelessWidget {
         ],
       ],
     );
+  }
+
+  Widget _buildIngredientsAnalysisV3(BuildContext context) {
+    final ingredientsData = result.ingredientsData!;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Ingredient Analysis',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8b5cf6).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFF8b5cf6).withOpacity(0.5)),
+              ),
+              child: Text(
+                '${ingredientsData.totalCount} ingredients',
+                style: const TextStyle(
+                  color: Color(0xFF8b5cf6),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // All ingredients with individual hazard scores
+        ...ingredientsData.analysis.asMap().entries.map((entry) {
+          final index = entry.key;
+          final ingredient = entry.value;
+          return _buildIngredientTileV3(ingredient, index);
+        }),
+      ],
+    );
+  }
+
+  Widget _buildIngredientTileV3(IngredientAnalysis ingredient, int index) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: _buildGlassCard(
+        borderColor: ingredient.hazardColor.withOpacity(0.5),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    ingredient.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 15,
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Source badge (Claude vs Database)
+                    if (ingredient.source != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: ingredient.source == 'database'
+                              ? const Color(0xFF06b6d4).withOpacity(0.2)
+                              : const Color(0xFF8b5cf6).withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: ingredient.source == 'database'
+                                ? const Color(0xFF06b6d4).withOpacity(0.5)
+                                : const Color(0xFF8b5cf6).withOpacity(0.5),
+                          ),
+                        ),
+                        child: Text(
+                          ingredient.source == 'database' ? 'DB' : 'AI',
+                          style: TextStyle(
+                            color: ingredient.source == 'database'
+                                ? const Color(0xFF06b6d4)
+                                : const Color(0xFF8b5cf6),
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                    ],
+                    // Hazard score badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: ingredient.hazardColor,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '${ingredient.hazardScore}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            ingredient.hazardLevel,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // Category
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                ingredient.category,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.white.withOpacity(0.7),
+                ),
+              ),
+            ),
+            // Concerns (if any)
+            if (ingredient.concerns.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              ...ingredient.concerns.map((concern) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          Icons.warning_amber,
+                          size: 14,
+                          color: ingredient.hazardColor,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            concern,
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.white.withOpacity(0.8),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+            ],
+          ],
+        ),
+      ),
+    ).animate().fadeIn(delay: (100 * index).ms).slideX(begin: 0.1);
   }
 
   Widget _buildFlaggedIngredientTile(FlaggedIngredient ingredient, int index) {
@@ -838,6 +1050,249 @@ class ResultScreen extends StatelessWidget {
         ),
       ),
     ).animate().fadeIn(delay: (100 * index).ms).slideX(begin: 0.1);
+  }
+
+  Widget _buildPositiveAttributesSection(BuildContext context) {
+    return _buildGlassCard(
+      color: const Color(0xFF10b981).withOpacity(0.1),
+      borderColor: const Color(0xFF10b981).withOpacity(0.3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10b981).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.add_circle,
+                  color: Color(0xFF10b981),
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Positive Attributes',
+                style: TextStyle(
+                  color: Color(0xFF10b981),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: result.positiveAttributes!.map((attribute) {
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF10b981).withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: const Color(0xFF10b981).withOpacity(0.5),
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (attribute.verified)
+                      const Icon(
+                        Icons.verified,
+                        size: 16,
+                        color: Color(0xFF10b981),
+                      ),
+                    if (attribute.verified) const SizedBox(width: 4),
+                    Text(
+                      attribute.claim,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10b981),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        '+${attribute.bonusPoints}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildExpirationSection(BuildContext context) {
+    final expiration = result.expiration!;
+    return _buildGlassCard(
+      color: expiration.statusColor.withOpacity(0.1),
+      borderColor: expiration.statusColor.withOpacity(0.3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.calendar_today,
+                    color: expiration.statusColor,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Expiration Status',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: expiration.statusColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: expiration.statusColor),
+                ),
+                child: Text(
+                  expiration.statusLabel,
+                  style: TextStyle(
+                    color: expiration.statusColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (expiration.notes != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              expiration.notes!,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.white.withOpacity(0.8),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildConditionCardV3(BuildContext context) {
+    final condition = result.conditionV3!;
+    return _buildGlassCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  const Text(
+                    'Condition Assessment',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF8b5cf6).withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF8b5cf6).withOpacity(0.5),
+                      ),
+                    ),
+                    child: Text(
+                      '${condition.weightPercentage}% weight',
+                      style: const TextStyle(
+                        color: Color(0xFF8b5cf6),
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: condition.conditionColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: condition.conditionColor),
+                ),
+                child: Text(
+                  condition.conditionLabel,
+                  style: TextStyle(
+                    color: condition.conditionColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // Concerns
+          if (condition.concerns.isNotEmpty) ...[
+            ...condition.concerns.map((concern) => Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        Icons.warning_amber,
+                        size: 16,
+                        color: condition.conditionColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          concern,
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.white.withOpacity(0.9),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                )),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildSaferAlternative(BuildContext context) {
