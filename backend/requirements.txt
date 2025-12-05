@@ -1,0 +1,26 @@
+# Cancer Detector Backend v2
+# FastAPI + PostgreSQL + External APIs
+
+# Web framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+pydantic==2.5.3
+
+# Async HTTP client
+httpx==0.26.0
+
+# Database
+sqlalchemy[asyncio]==2.0.25
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+
+# Image handling (for future OCR)
+pillow==10.2.0
+
+# Utilities
+python-dotenv==1.0.0
+python-multipart==0.0.6
+
+# Development
+pytest==7.4.4
+pytest-asyncio==0.23.3

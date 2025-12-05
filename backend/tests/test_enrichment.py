@@ -135,3 +135,26 @@ def test_critical_test_hfcs_vs_water_scratched():
 
     # HFCS must score LOWER than water
     assert hfcs_score < water_score, f"HFCS ({hfcs_score}) should be < Water ({water_score})"
+
+
+def test_penalty_boundaries():
+    """Verify penalty thresholds are correct at boundaries"""
+    # Score 3: No penalty (low concern)
+    low = [{"name": "sugar", "hazard_score": 3, "is_safe": True}]
+    result = calculate_ingredient_scores(low)
+    assert result['penalty'] == 0, "Score 3 should have 0 penalty"
+
+    # Score 4: Moderate penalty (-2)
+    moderate_low = [{"name": "sls", "hazard_score": 4, "is_safe": False}]
+    result = calculate_ingredient_scores(moderate_low)
+    assert result['penalty'] == 2, "Score 4 should have -2 penalty"
+
+    # Score 6: Still moderate (-2, not -5)
+    moderate_high = [{"name": "hfcs", "hazard_score": 6, "is_safe": False}]
+    result = calculate_ingredient_scores(moderate_high)
+    assert result['penalty'] == 2, "Score 6 should have -2 penalty, not -5"
+
+    # Score 7: High penalty (-5, not -2)
+    high = [{"name": "bha", "hazard_score": 7, "is_safe": False}]
+    result = calculate_ingredient_scores(high)
+    assert result['penalty'] == 5, "Score 7 should have -5 penalty"

@@ -1,0 +1,4 @@
+backend/
+flutter_app/
+.git/
+*.md

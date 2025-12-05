@@ -1,0 +1,67 @@
+{
+  "products": [
+    {
+      "name": "Clorox Disinfecting Wipes",
+      "brand": "Clorox",
+      "category": "cleaning",
+      "barcode": "0055500016099",
+      "search_terms": ["clorox", "disinfecting wipes", "clorox wipes"],
+      "ingredients": [
+        "Water",
+        "Hexoxyethanol",
+        "Isopropanol",
+        "C12-14 Alcohols Ethoxylated Propoxylated",
+        "Alkyl C12-14 Dimethylethylbenzyl Ammonium Chloride",
+        "Alkyl C12-18 Dimethylbenzyl Ammonium Chloride",
+        "Sodium Bicarbonate",
+        "Citric Acid",
+        "Fragrance",
+        "Limonene"
+      ],
+      "source": "SmartLabel"
+    },
+    {
+      "name": "Clorox Regular Bleach",
+      "brand": "Clorox",
+      "category": "cleaning",
+      "barcode": "0004460031807",
+      "search_terms": ["clorox", "bleach", "clorox bleach"],
+      "ingredients": [
+        "Water",
+        "Sodium Hypochlorite",
+        "Sodium Hydroxide"
+      ],
+      "source": "SmartLabel"
+    },
+    {
+      "name": "Lysol Disinfectant Spray",
+      "brand": "Lysol",
+      "category": "cleaning",
+      "search_terms": ["lysol", "disinfectant spray", "lysol spray"],
+      "ingredients": [
+        "Alkyl Dimethyl Benzyl Ammonium Saccharinate",
+        "Ethanol",
+        "Water",
+        "Fragrance"
+      ],
+      "source": "Manual Entry"
+    },
+    {
+      "name": "Tide Laundry Detergent",
+      "brand": "Tide",
+      "category": "cleaning",
+      "search_terms": ["tide", "laundry detergent", "tide detergent"],
+      "ingredients": [
+        "Water",
+        "C10-16 Pareth",
+        "MEA-Laureth Sulfate",
+        "Propylene Glycol",
+        "Linear Alkylbenzene Sulfonate",
+        "Alcohol Ethoxylate",
+        "Sodium Laureth Sulfate",
+        "Fragrance"
+      ],
+      "source": "Manual Entry"
+    }
+  ]
+}

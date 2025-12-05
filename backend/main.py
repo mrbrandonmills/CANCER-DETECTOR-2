@@ -737,6 +737,10 @@ def enrich_ingredients_with_database(ingredients_analysis: List[Dict]) -> List[D
     enriched = []
 
     for ingredient in ingredients_analysis:
+        # Validate required fields exist
+        if 'name' not in ingredient or 'hazard_score' not in ingredient:
+            continue  # Skip malformed ingredients
+
         ingredient_copy = ingredient.copy()
         ingredient_name = ingredient['name'].lower().strip()
 
