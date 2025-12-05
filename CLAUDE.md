@@ -4,10 +4,10 @@ AI-powered product safety scanner for iOS that analyzes household products and p
 
 ## Project Overview
 
-**Version:** 2.0.0+1
-**Status:** Ready for TestFlight Beta Testing
+**Version:** 3.0.0+1
+**Status:** V3 Deployed - Ready for Production Testing
 **Platform:** iOS (Flutter)
-**Backend:** FastAPI v3.1.0 on Railway
+**Backend:** FastAPI V3.0.0 on Railway (Modular Prompts Architecture)
 **AI Model:** Claude Sonnet 4 (claude-sonnet-4-20250514)
 
 ## Architecture
@@ -35,8 +35,10 @@ AI-powered product safety scanner for iOS that analyzes household products and p
 - **AI Analysis:** Claude Vision extracts product info, ingredients, and materials
 - **No Barcode Required:** Visual identification of any household product
 
-### 2. Safety Scoring System
-- **Overall Score:** 0-100 (weighted: 70% safety + 30% condition)
+### 2. Safety Scoring System (V3)
+- **Overall Score:** 0-100 (weighted: 95% ingredients + 5% condition)
+- **Cookware Exception:** 85% ingredients + 15% condition (condition matters more)
+- **Positive Bonuses:** +3 per "X-free" claim (max +15 total)
 - **Letter Grades:** A+ through F
   - A+: 95-100 (Excellent)
   - A: 90-94 (Very Good)
@@ -44,10 +46,14 @@ AI-powered product safety scanner for iOS that analyzes household products and p
   - B+: 80-84 (Above Average)
   - F: 0-49 (Poor)
 
-### 3. Product Analysis
-- **Consumables:** Ingredient analysis against toxicity database (103 ingredients)
-- **Non-Consumables:** Material safety analysis (18 materials tracked)
-- **Condition Assessment:** Visual inspection for wear, damage, scratches
+### 3. Product Analysis (V3)
+- **6 Product Categories:** Food, Water, Cosmetics, Cookware, Cleaning, Supplements
+- **Modular Prompts:** Category-specific analysis modules for specialized knowledge
+- **Ingredient Analysis:** Against expanded toxicity database (296 ingredients)
+- **Hazard Scoring:** Individual 0-10 hazard scores for each ingredient
+- **Database Enrichment:** Uses HIGHER score (Claude vs Database) for conservative safety
+- **Positive Attributes:** Recognition of "X-free" claims with bonus points
+- **Condition Assessment:** Visual inspection for wear, damage, scratches (5% or 15% weight)
 - **Personalized Notes:** Specific observations about photographed item
 
 ### 4. Results Display
