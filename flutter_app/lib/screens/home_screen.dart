@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../services/scan_history_service.dart';
 import 'scan_screen.dart';
 import 'history_screen.dart';
+import 'concerns_report_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -93,6 +94,10 @@ class HomeScreen extends StatelessWidget {
                                 '${historyService.totalScans}',
                                 'Products\nScanned',
                                 Icons.inventory_2,
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                                ),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -100,9 +105,13 @@ class HomeScreen extends StatelessWidget {
                               child: _buildStatCard(
                                 context,
                                 '${historyService.carcinogensFound}',
-                                'Carcinogens\nFound',
+                                'Carcinogens/\nConcerns',
                                 Icons.warning_amber,
                                 isWarning: historyService.carcinogensFound > 0,
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const ConcernsReportScreen()),
+                                ),
                               ),
                             ),
                           ],
@@ -278,44 +287,52 @@ class HomeScreen extends StatelessWidget {
     String label,
     IconData icon, {
     bool isWarning = false,
+    VoidCallback? onTap,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isWarning 
-              ? Colors.orange.withOpacity(0.3)
-              : Theme.of(context).colorScheme.outline.withOpacity(0.2),
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isWarning
+                  ? Colors.orange.withOpacity(0.3)
+                  : Theme.of(context).colorScheme.outline.withOpacity(0.2),
+            ),
+          ),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 24,
+                color: isWarning ? Colors.orange : Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: isWarning ? Colors.orange : null,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            icon,
-            size: 24,
-            color: isWarning ? Colors.orange : Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: isWarning ? Colors.orange : null,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-            ),
-          ),
-        ],
       ),
     );
   }
