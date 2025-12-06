@@ -2203,8 +2203,22 @@ Return ONLY a JSON object with this exact structure:
             "confidence": analysis.get("confidence", "medium")
         }
 
+        # LOG: What ingredients were extracted
+        logger.info(f"[V4 SCAN] Product: {product_data['product_name']}")
+        logger.info(f"[V4 SCAN] Brand: {product_data['brand']}")
+        logger.info(f"[V4 SCAN] Ingredients extracted: {len(product_data['ingredients'])}")
+        logger.info(f"[V4 SCAN] Ingredient list: {product_data['ingredients']}")
+
         # Calculate V4 score
         v4_results = calculate_v4_score(product_data)
+
+        # LOG: What was calculated
+        logger.info(f"[V4 SCAN] Overall score: {v4_results['overall_score']}, Grade: {v4_results['overall_grade']}")
+        logger.info(f"[V4 SCAN] Alerts count: {len(v4_results['alerts'])}")
+        logger.info(f"[V4 SCAN] Hidden truths count: {len(v4_results['hidden_truths'])}")
+        logger.info(f"[V4 SCAN] Ingredients graded count: {len(v4_results['ingredients_graded'])}")
+        logger.info(f"[V4 SCAN] Alerts: {v4_results['alerts']}")
+        logger.info(f"[V4 SCAN] Ingredients graded: {[{'name': i['name'], 'grade': i['grade']} for i in v4_results['ingredients_graded']]}")
 
         # Generate unique report ID
         report_id = f"V4-{datetime.now().strftime('%Y%m%d%H%M%S')}-{os.urandom(4).hex().upper()}"
