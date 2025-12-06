@@ -632,6 +632,31 @@ NOVA_4_MARKERS = [
     "foaming",
     "gelling agent",
     "glazing agent",
+    # Industrial processing markers
+    "enriched",  # Enriched flour - refined and re-fortified
+    "refined",  # Refined oils, flours
+    "bleached",  # Bleached flour
+    # Preservatives (often indicate ultra-processing)
+    "tbhq",
+    "bha",
+    "bht",
+    "sodium benzoate",
+    "potassium sorbate",
+    "calcium propionate",
+    # Artificial colors (FD&C colors)
+    "yellow 5",
+    "yellow 6",
+    "red 40",
+    "red 3",
+    "blue 1",
+    "blue 2",
+    "caramel color",
+    # Sweeteners
+    "corn syrup",
+    "invert sugar",
+    "glucose syrup",
+    "dextrose",
+    "maltose",
 ]
 
 # ============================================
@@ -1620,12 +1645,26 @@ This is the "healthy brand + junk food" business model.
         supply_chain_score * 0.15
     )
 
-    # Apply score cap for F-grade ingredients
+    # Apply score caps based on worst ingredient tier
+    # F-grade ingredients → cap at 29 (cannot be better than F)
+    # D-grade ingredients → cap at 49 (cannot be better than D)
+    # C-grade ingredients → cap at 69 (cannot be better than C)
     has_f_grade = any(ing["grade"] == "F" for ing in ingredients_graded)
+    has_d_grade = any(ing["grade"] == "D" for ing in ingredients_graded)
+    has_c_grade = any(ing["grade"] == "C" for ing in ingredients_graded)
+
     if has_f_grade:
+        overall_score = min(overall_score, 29)  # Cannot be better than F
+        if "⚖️ SCORE CAPPED" not in str(alerts):
+            alerts.append("⚖️ SCORE CAPPED: Product cannot score above F due to F-grade ingredients")
+    elif has_d_grade:
         overall_score = min(overall_score, 49)  # Cannot be better than D
-        if f"⚖️ SCORE CAPPED: Product cannot score above D due to F-grade ingredients" not in alerts:
-            alerts.append("⚖️ SCORE CAPPED: Product cannot score above D due to F-grade ingredients")
+        if "⚖️ SCORE CAPPED" not in str(alerts):
+            alerts.append("⚖️ SCORE CAPPED: Product cannot score above D due to D-grade ingredients")
+    elif has_c_grade:
+        overall_score = min(overall_score, 69)  # Cannot be better than C
+        if "⚖️ SCORE CAPPED" not in str(alerts):
+            alerts.append("⚖️ SCORE CAPPED: Product cannot score above C due to C-grade ingredients")
 
     overall_score = max(0, min(100, round(overall_score)))
 
