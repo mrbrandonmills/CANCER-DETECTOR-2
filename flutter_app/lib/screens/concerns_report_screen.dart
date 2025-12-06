@@ -23,9 +23,9 @@ class ConcernsReportScreen extends StatelessWidget {
       body: Consumer<ScanHistoryService>(
         builder: (context, historyService, child) {
           // Filter scans with grade D or worse (score <= 49)
-          final concernScans = historyService.scans.where((scan) {
-            // Check if scan has a gradeValue or safetyScore
-            final score = scan.gradeValue ?? scan.safetyScore ?? 100;
+          final concernScans = historyService.history.where((scan) {
+            // Check if scan has a safetyScore or overallScore
+            final score = scan.safetyScore ?? scan.overallScore ?? 100;
             return score <= 49; // D grade or worse
           }).toList();
 
@@ -303,7 +303,7 @@ class ConcernsReportScreen extends StatelessWidget {
   }
 
   Widget _buildConcernCard(BuildContext context, ScanResult scan, int index) {
-    final score = scan.gradeValue ?? scan.safetyScore ?? 0;
+    final score = scan.safetyScore ?? scan.overallScore ?? 0;
     final grade = scan.grade ?? _getGradeFromScore(score);
     final gradeColor = _getGradeColor(grade);
 
