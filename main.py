@@ -15,11 +15,14 @@ import os
 import json
 import base64
 import re
+import uuid
+import asyncio
 from datetime import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
+from enum import Enum
 import anthropic
 
 # V3 Modular Prompts
@@ -832,6 +835,106 @@ class HealthCheck(BaseModel):
     claude_api: str
 
 # ============================================
+# V4 PHASE 3: DEEP RESEARCH MODELS
+# ============================================
+
+class JobStatus(str, Enum):
+    PENDING = "pending"
+    PROCESSING = "processing"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+class DeepResearchRequest(BaseModel):
+    product_name: str
+    brand: Optional[str] = None
+    category: str
+    ingredients: List[str]
+
+class DeepResearchJob(BaseModel):
+    job_id: str
+    status: JobStatus
+    progress: int  # 0-100
+    current_step: Optional[str] = None
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    created_at: str
+    completed_at: Optional[str] = None
+
+# In-memory job store (use Redis/DB in production)
+DEEP_RESEARCH_JOBS: Dict[str, DeepResearchJob] = {}
+
+# ============================================
+# DEEP RESEARCH PROMPT
+# ============================================
+
+DEEP_RESEARCH_PROMPT_TEMPLATE = """You are TrueCancer's Deep Research Agent. The user has requested a comprehensive investigation of this product:
+
+**Product**: {product_name}
+**Brand**: {brand}
+**Category**: {category}
+**Ingredients**: {ingredients}
+
+Your task is to generate a comprehensive report with SEVEN sections. Be direct, honest, and hedge toward consumer protection. The user deserves to know what companies don't want them to know.
+
+## 1. EXECUTIVE SUMMARY
+One concise paragraph: Should this person buy this product? Why or why not? Be direct and honest.
+
+## 2. THE COMPANY BEHIND IT
+- Parent company ownership chain (if any)
+- Corporate history and major controversies
+- Lobbying activities and political spending (if known)
+- Recent lawsuits, settlements, or regulatory actions
+- Overall corporate ethics assessment
+
+## 3. INGREDIENT DEEP DIVE
+For each concerning ingredient identified:
+- Full scientific/chemical name
+- What it does in this product (functional purpose)
+- Key health research findings (cite studies when possible)
+- Regulatory status globally (banned where? allowed where?)
+- Why it's allowed in the US despite concerns
+
+## 4. SUPPLY CHAIN INVESTIGATION
+- Where key ingredients are likely sourced
+- Known suppliers and their practices (if information available)
+- Labor condition concerns (if documented)
+- Environmental impact of production
+- Monoculture vs. sustainable farming assessment
+
+## 5. REGULATORY HISTORY
+- FDA warning letters (if any)
+- Product recalls (if any)
+- FTC advertising complaints or enforcement
+- State-level regulatory actions
+- Note if no significant regulatory issues found
+
+## 6. BETTER ALTERNATIVES
+List 3-5 alternative products that:
+- Score higher on TrueCancer safety metrics
+- Are genuinely healthier (not just marketing)
+- Are ethically sourced when possible
+- Are reasonably priced and accessible
+- Explain WHY each is better
+
+## 7. ACTION ITEMS FOR CONSUMER
+What can the consumer do right now?
+- Immediate substitutes they can buy today
+- Specific brands to support instead
+- How to read labels to avoid similar issues
+- Resources for learning more about this topic
+- One simple action step they can take
+
+IMPORTANT GUIDELINES:
+- Be factual and cite sources when making claims
+- If information is not available, say so clearly
+- Distinguish between documented facts vs. reasonable concerns
+- Avoid fear-mongering but don't minimize real risks
+- Give actionable advice, not just information
+- Remember: Consumer protection over corporate reputation
+
+Generate the complete report now:"""
+
+# ============================================
 # CORE FUNCTIONS
 # ============================================
 
@@ -1543,6 +1646,118 @@ This is the "healthy brand + junk food" business model.
 
 
 # ============================================
+# V4 PHASE 3: DEEP RESEARCH BACKGROUND TASK
+# ============================================
+
+async def process_deep_research(job_id: str, request_data: DeepResearchRequest):
+    """
+    Background task that processes deep research requests.
+    Updates job status and progress in DEEP_RESEARCH_JOBS dict.
+    """
+    try:
+        job = DEEP_RESEARCH_JOBS[job_id]
+        job.status = JobStatus.PROCESSING
+
+        # Step 1: Prepare prompt
+        job.progress = 10
+        job.current_step = "Preparing comprehensive analysis..."
+        await asyncio.sleep(1)  # Simulate processing
+
+        # Step 2: Format ingredients list
+        job.progress = 20
+        job.current_step = "Analyzing ingredients database..."
+        ingredients_str = ", ".join(request_data.ingredients)
+        await asyncio.sleep(1)
+
+        # Step 3: Build research prompt
+        job.progress = 30
+        job.current_step = "Researching corporate ownership..."
+        research_prompt = DEEP_RESEARCH_PROMPT_TEMPLATE.format(
+            product_name=request_data.product_name,
+            brand=request_data.brand or "Unknown",
+            category=request_data.category,
+            ingredients=ingredients_str
+        )
+        await asyncio.sleep(1)
+
+        # Step 4: Call Claude API
+        job.progress = 50
+        job.current_step = "Investigating supply chain..."
+
+        if not client:
+            raise Exception("Anthropic API key not configured")
+
+        await asyncio.sleep(2)  # Simulate API call delay
+
+        job.progress = 70
+        job.current_step = "Checking regulatory history..."
+
+        # Call Claude for deep research
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=8000,  # Comprehensive report needs more tokens
+            temperature=0.3,  # Lower temp for factual research
+            messages=[{
+                "role": "user",
+                "content": research_prompt
+            }]
+        )
+
+        await asyncio.sleep(1)
+
+        # Step 5: Parse response
+        job.progress = 85
+        job.current_step = "Finding better alternatives..."
+
+        report_text = response.content[0].text
+
+        await asyncio.sleep(1)
+
+        # Step 6: Format report
+        job.progress = 95
+        job.current_step = "Generating recommendations..."
+
+        # Parse sections (simple parsing - can be enhanced)
+        sections = {}
+        current_section = None
+        current_content = []
+
+        for line in report_text.split('\n'):
+            if line.startswith('## '):
+                if current_section:
+                    sections[current_section] = '\n'.join(current_content).strip()
+                current_section = line[3:].strip()
+                current_content = []
+            else:
+                current_content.append(line)
+
+        if current_section:
+            sections[current_section] = '\n'.join(current_content).strip()
+
+        # Step 7: Complete
+        job.progress = 100
+        job.current_step = "Complete"
+        job.status = JobStatus.COMPLETED
+        job.completed_at = datetime.utcnow().isoformat()
+        job.result = {
+            "product_name": request_data.product_name,
+            "brand": request_data.brand,
+            "category": request_data.category,
+            "report": sections,
+            "full_report": report_text,
+            "generated_at": datetime.utcnow().isoformat()
+        }
+
+    except Exception as e:
+        # Mark job as failed
+        job = DEEP_RESEARCH_JOBS.get(job_id)
+        if job:
+            job.status = JobStatus.FAILED
+            job.error = str(e)
+            job.completed_at = datetime.utcnow().isoformat()
+
+
+# ============================================
 # API ENDPOINTS
 # ============================================
 
@@ -2104,6 +2319,76 @@ async def scan_product_v3(image: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Failed to parse AI response: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
+
+
+# ============================================
+# V4 PHASE 3: DEEP RESEARCH ENDPOINTS
+# ============================================
+
+@app.post("/api/v4/deep-research")
+async def start_deep_research(
+    request: DeepResearchRequest,
+    background_tasks: BackgroundTasks
+):
+    """
+    Start a deep research job for comprehensive product investigation.
+    Returns job_id for tracking progress.
+
+    This is a premium feature that generates a 7-section report including:
+    - Executive summary
+    - Corporate ownership investigation
+    - Ingredient deep dive
+    - Supply chain analysis
+    - Regulatory history
+    - Better alternatives
+    - Action items
+    """
+
+    # Generate unique job ID
+    job_id = str(uuid.uuid4())
+
+    # Create job tracking object
+    job = DeepResearchJob(
+        job_id=job_id,
+        status=JobStatus.PENDING,
+        progress=0,
+        current_step="Initializing deep research...",
+        created_at=datetime.utcnow().isoformat()
+    )
+
+    # Store job
+    DEEP_RESEARCH_JOBS[job_id] = job
+
+    # Start background task
+    background_tasks.add_task(process_deep_research, job_id, request)
+
+    return {
+        "job_id": job_id,
+        "status": "pending",
+        "message": "Deep research initiated. Use the job_id to check progress.",
+        "check_status_url": f"/api/v4/job/{job_id}"
+    }
+
+
+@app.get("/api/v4/job/{job_id}")
+async def get_job_status(job_id: str):
+    """
+    Check the status of a deep research job.
+
+    Returns:
+    - Job status (pending/processing/completed/failed)
+    - Progress percentage (0-100)
+    - Current step description
+    - Result (when completed)
+    - Error message (if failed)
+    """
+
+    job = DEEP_RESEARCH_JOBS.get(job_id)
+
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return job.dict()
 
 
 # ============================================
