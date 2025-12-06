@@ -1535,7 +1535,8 @@ def calculate_v4_score(product_data: dict) -> dict:
             "grade": grade,
             "color": color,
             "reason": reason,
-            "is_bonus": ingredient_data.get("bonus", False) if ingredient_data else False
+            "hazard_score": score,  # ✅ Add hazard score for Flutter
+            "hidden_truth": HIDDEN_TRUTHS.get(hidden_truth_key) if hidden_truth_key else None  # ✅ Add hidden truth
         })
 
     # Sort ingredients worst-first (F → D → C → B → A)
