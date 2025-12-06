@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
 import 'package:http_parser/http_parser.dart';
 import '../models/scan_result.dart';
+import '../models/scan_result_v4.dart';
 
 class ApiService {
   // Production Railway deployment - Backend v3.1.0
@@ -169,6 +170,71 @@ class ApiService {
       return null;
     } catch (e) {
       return null;
+    }
+  }
+
+  /// V4 endpoint: Multi-dimensional TrueCancer scoring with corporate disclosure
+  /// Returns ScanResultV4 with dimension_scores, ingredients_graded, alerts, and hidden_truths
+  Future<ScanResultV4> scanImageV4(File imageFile) async {
+    try {
+      // Create multipart request
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('$baseUrl/api/v4/scan'), // V4 endpoint
+      );
+
+      // Detect MIME type from file extension
+      final mimeTypeString = lookupMimeType(imageFile.path) ?? 'image/jpeg';
+      final mediaType = MediaType.parse(mimeTypeString);
+
+      // Add image file with explicit contentType
+      request.files.add(await http.MultipartFile.fromPath(
+        'image',
+        imageFile.path,
+        contentType: mediaType,
+      ));
+
+      // Send request
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final jsonData = jsonDecode(response.body);
+        return ScanResultV4.fromJson(jsonData);
+      } else if (response.statusCode == 400) {
+        // Bad request - return error state
+        try {
+          final jsonData = jsonDecode(response.body);
+          final errorMsg = jsonData['detail'] ?? jsonData['error'] ?? 'Invalid request';
+          // Return error state V4 result
+          return ScanResultV4(
+            success: false,
+            score: 0,
+            grade: 'F',
+            dimensionScores: DimensionScores(
+              ingredientSafety: 0,
+              processingLevel: 0,
+              corporateEthics: 0,
+              supplyChain: 0,
+            ),
+            ingredientsGraded: [],
+            alerts: [errorMsg],
+            hiddenTruths: [],
+          );
+        } catch (_) {
+          throw Exception('Invalid request: ${response.body}');
+        }
+      } else if (response.statusCode == 500) {
+        throw Exception('Server error. Please try again.');
+      } else {
+        throw Exception('Unexpected error: ${response.statusCode}');
+      }
+    } on SocketException {
+      throw Exception('No internet connection. Please check your network.');
+    } on http.ClientException {
+      throw Exception('Connection failed. Please try again.');
+    } catch (e) {
+      throw Exception('Error: $e');
     }
   }
 }

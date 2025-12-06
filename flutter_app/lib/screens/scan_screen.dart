@@ -4,7 +4,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../services/scan_history_service.dart';
+import '../models/scan_result.dart';
+import '../models/scan_result_v4.dart';
 import 'result_screen.dart';
+import 'result_screen_v4.dart';
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
@@ -17,6 +20,9 @@ class _ScanScreenState extends State<ScanScreen> {
   final ImagePicker _picker = ImagePicker();
   bool _isProcessing = false;
   String? _statusMessage;
+
+  // Toggle between V3 and V4 API (set to true to use V4)
+  bool _useV4Api = true;
 
   @override
   void initState() {
@@ -77,6 +83,64 @@ class _ScanScreenState extends State<ScanScreen> {
         _statusMessage = 'Reading label and identifying ingredients...';
       });
 
+      if (_useV4Api) {
+        // Use V4 API endpoint
+        await _processPhotoV4(imageFile, apiService);
+      } else {
+        // Use V3 API endpoint (legacy)
+        await _processPhotoV3(imageFile, apiService);
+      }
+    } catch (e) {
+      _showError('Error: $e');
+
+      // Go back after showing error
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) Navigator.pop(context);
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+          _statusMessage = null;
+        });
+      }
+    }
+  }
+
+  /// Process photo using V4 API
+  Future<void> _processPhotoV4(File imageFile, ApiService apiService) async {
+    try {
+      setState(() {
+        _statusMessage = 'Analyzing with TrueCancer V4 system...';
+      });
+
+      // Call V4 endpoint
+      final resultV4 = await apiService.scanImageV4(imageFile);
+
+      if (!mounted) return;
+
+      // Navigate to V4 result screen
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ResultScreenV4(
+            result: resultV4,
+          ),
+        ),
+      );
+    } catch (e) {
+      _showError('V4 API Error: $e');
+
+      // Go back after showing error
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) Navigator.pop(context);
+      });
+    }
+  }
+
+  /// Process photo using V3 API (legacy)
+  Future<void> _processPhotoV3(File imageFile, ApiService apiService) async {
+    try {
       // Send to backend v3.1.0 for processing
       final result = await apiService.scanImage(imageFile);
 
@@ -102,19 +166,12 @@ class _ScanScreenState extends State<ScanScreen> {
         });
       }
     } catch (e) {
-      _showError('Error: $e');
+      _showError('V3 API Error: $e');
 
       // Go back after showing error
       Future.delayed(const Duration(seconds: 2), () {
         if (mounted) Navigator.pop(context);
       });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isProcessing = false;
-          _statusMessage = null;
-        });
-      }
     }
   }
 

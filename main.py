@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from enum import Enum
 import anthropic
+import redis
 
 # V3 Modular Prompts
 from prompts import build_prompt
@@ -38,6 +39,20 @@ if not ANTHROPIC_API_KEY:
 
 # Initialize Anthropic client
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
+
+# ============================================
+# REDIS SETUP
+# ============================================
+
+redis_client = None
+try:
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+    redis_client = redis.from_url(redis_url, decode_responses=True)
+    redis_client.ping()  # Test connection
+    print(f"✅ Redis connected: {redis_url}")
+except Exception as e:
+    print(f"⚠️ Redis connection failed: {e}")
+    print("Falling back to in-memory storage (jobs will be lost on restart)")
 
 # ============================================
 # TOXICITY DATABASE (103 ingredients)
@@ -1646,32 +1661,88 @@ This is the "healthy brand + junk food" business model.
 
 
 # ============================================
+# V4 PHASE 3: REDIS HELPER FUNCTIONS
+# ============================================
+
+def save_job_to_redis(job_id: str, job_data: dict):
+    """Save job to Redis with 24-hour expiration"""
+    if redis_client:
+        try:
+            redis_client.setex(
+                f"job:{job_id}",
+                86400,  # 24 hours in seconds
+                json.dumps(job_data)
+            )
+        except Exception as e:
+            print(f"Redis save error for {job_id}: {e}")
+            # Fallback to in-memory
+            DEEP_RESEARCH_JOBS[job_id] = DeepResearchJob(**job_data)
+    else:
+        DEEP_RESEARCH_JOBS[job_id] = DeepResearchJob(**job_data)
+
+def get_job_from_redis(job_id: str) -> dict | None:
+    """Retrieve job from Redis or in-memory fallback"""
+    if redis_client:
+        try:
+            job_json = redis_client.get(f"job:{job_id}")
+            if job_json:
+                return json.loads(job_json)
+        except Exception as e:
+            print(f"Redis get error for {job_id}: {e}")
+
+    # Fallback to in-memory
+    job = DEEP_RESEARCH_JOBS.get(job_id)
+    return job.dict() if job else None
+
+def update_job_progress(job_id: str, progress: int, current_step: str):
+    """Update job progress in Redis"""
+    job_data = get_job_from_redis(job_id)
+    if job_data:
+        job_data["progress"] = progress
+        job_data["current_step"] = current_step
+        save_job_to_redis(job_id, job_data)
+
+def complete_job(job_id: str, result: dict):
+    """Mark job as completed with full report"""
+    job_data = get_job_from_redis(job_id)
+    if job_data:
+        job_data["status"] = JobStatus.COMPLETED.value
+        job_data["progress"] = 100
+        job_data["current_step"] = "Complete"
+        job_data["result"] = result
+        job_data["completed_at"] = datetime.utcnow().isoformat()
+        save_job_to_redis(job_id, job_data)
+
+def fail_job(job_id: str, error: str):
+    """Mark job as failed with error message"""
+    job_data = get_job_from_redis(job_id)
+    if job_data:
+        job_data["status"] = JobStatus.FAILED.value
+        job_data["error"] = error
+        job_data["completed_at"] = datetime.utcnow().isoformat()
+        save_job_to_redis(job_id, job_data)
+
+# ============================================
 # V4 PHASE 3: DEEP RESEARCH BACKGROUND TASK
 # ============================================
 
 async def process_deep_research(job_id: str, request_data: DeepResearchRequest):
     """
     Background task that processes deep research requests.
-    Updates job status and progress in DEEP_RESEARCH_JOBS dict.
+    Updates job status and progress in Redis (with in-memory fallback).
     """
     try:
-        job = DEEP_RESEARCH_JOBS[job_id]
-        job.status = JobStatus.PROCESSING
-
-        # Step 1: Prepare prompt
-        job.progress = 10
-        job.current_step = "Preparing comprehensive analysis..."
+        # Step 1: Mark as processing
+        update_job_progress(job_id, 10, "Preparing comprehensive analysis...")
         await asyncio.sleep(1)  # Simulate processing
 
         # Step 2: Format ingredients list
-        job.progress = 20
-        job.current_step = "Analyzing ingredients database..."
+        update_job_progress(job_id, 20, "Analyzing ingredients database...")
         ingredients_str = ", ".join(request_data.ingredients)
         await asyncio.sleep(1)
 
         # Step 3: Build research prompt
-        job.progress = 30
-        job.current_step = "Researching corporate ownership..."
+        update_job_progress(job_id, 30, "Researching corporate ownership...")
         research_prompt = DEEP_RESEARCH_PROMPT_TEMPLATE.format(
             product_name=request_data.product_name,
             brand=request_data.brand or "Unknown",
@@ -1681,16 +1752,14 @@ async def process_deep_research(job_id: str, request_data: DeepResearchRequest):
         await asyncio.sleep(1)
 
         # Step 4: Call Claude API
-        job.progress = 50
-        job.current_step = "Investigating supply chain..."
+        update_job_progress(job_id, 50, "Investigating supply chain...")
 
         if not client:
             raise Exception("Anthropic API key not configured")
 
         await asyncio.sleep(2)  # Simulate API call delay
 
-        job.progress = 70
-        job.current_step = "Checking regulatory history..."
+        update_job_progress(job_id, 70, "Checking regulatory history...")
 
         # Call Claude for deep research
         response = client.messages.create(
@@ -1706,16 +1775,14 @@ async def process_deep_research(job_id: str, request_data: DeepResearchRequest):
         await asyncio.sleep(1)
 
         # Step 5: Parse response
-        job.progress = 85
-        job.current_step = "Finding better alternatives..."
+        update_job_progress(job_id, 85, "Finding better alternatives...")
 
         report_text = response.content[0].text
 
         await asyncio.sleep(1)
 
         # Step 6: Format report
-        job.progress = 95
-        job.current_step = "Generating recommendations..."
+        update_job_progress(job_id, 95, "Generating recommendations...")
 
         # Parse sections (simple parsing - can be enhanced)
         sections = {}
@@ -1734,12 +1801,8 @@ async def process_deep_research(job_id: str, request_data: DeepResearchRequest):
         if current_section:
             sections[current_section] = '\n'.join(current_content).strip()
 
-        # Step 7: Complete
-        job.progress = 100
-        job.current_step = "Complete"
-        job.status = JobStatus.COMPLETED
-        job.completed_at = datetime.utcnow().isoformat()
-        job.result = {
+        # Step 7: Complete job
+        result = {
             "product_name": request_data.product_name,
             "brand": request_data.brand,
             "category": request_data.category,
@@ -1747,14 +1810,12 @@ async def process_deep_research(job_id: str, request_data: DeepResearchRequest):
             "full_report": report_text,
             "generated_at": datetime.utcnow().isoformat()
         }
+        complete_job(job_id, result)
 
     except Exception as e:
         # Mark job as failed
-        job = DEEP_RESEARCH_JOBS.get(job_id)
-        if job:
-            job.status = JobStatus.FAILED
-            job.error = str(e)
-            job.completed_at = datetime.utcnow().isoformat()
+        print(f"Deep research error for {job_id}: {e}")
+        fail_job(job_id, str(e))
 
 
 # ============================================
@@ -2348,16 +2409,19 @@ async def start_deep_research(
     job_id = str(uuid.uuid4())
 
     # Create job tracking object
-    job = DeepResearchJob(
-        job_id=job_id,
-        status=JobStatus.PENDING,
-        progress=0,
-        current_step="Initializing deep research...",
-        created_at=datetime.utcnow().isoformat()
-    )
+    job_data = {
+        "job_id": job_id,
+        "status": JobStatus.PENDING.value,
+        "progress": 0,
+        "current_step": "Initializing deep research...",
+        "created_at": datetime.utcnow().isoformat(),
+        "result": None,
+        "error": None,
+        "completed_at": None
+    }
 
-    # Store job
-    DEEP_RESEARCH_JOBS[job_id] = job
+    # Save to Redis (with fallback to in-memory)
+    save_job_to_redis(job_id, job_data)
 
     # Start background task
     background_tasks.add_task(process_deep_research, job_id, request)
@@ -2383,12 +2447,33 @@ async def get_job_status(job_id: str):
     - Error message (if failed)
     """
 
-    job = DEEP_RESEARCH_JOBS.get(job_id)
+    job_data = get_job_from_redis(job_id)
 
-    if not job:
+    if not job_data:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    return job.dict()
+    return job_data
+
+
+@app.delete("/api/v4/admin/cleanup-jobs")
+async def cleanup_old_jobs():
+    """
+    Remove jobs older than 24 hours (Redis handles this automatically via TTL).
+
+    This endpoint is provided for administrative purposes, but Redis
+    automatically expires jobs after 24 hours using the setex command.
+    """
+    if not redis_client:
+        return {
+            "message": "Redis not available, using in-memory storage",
+            "note": "In-memory jobs are cleared on server restart"
+        }
+
+    return {
+        "message": "Job cleanup is automatic (24-hour TTL)",
+        "redis_connected": True,
+        "cleanup_method": "Redis setex auto-expiration"
+    }
 
 
 # ============================================
