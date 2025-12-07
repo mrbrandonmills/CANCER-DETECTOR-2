@@ -80,10 +80,9 @@ async def init_db():
 
         # Ensure cached_products table exists with correct schema
         async with db_pool.acquire() as conn:
-            # Drop old table to ensure clean schema (cache is ephemeral anyway)
-            await conn.execute("DROP TABLE IF EXISTS cached_products")
+            # Create table if it doesn't exist
             await conn.execute("""
-                CREATE TABLE cached_products (
+                CREATE TABLE IF NOT EXISTS cached_products (
                     id SERIAL PRIMARY KEY,
                     cache_key VARCHAR(255) UNIQUE NOT NULL,
                     product_name VARCHAR(255),
@@ -91,6 +90,11 @@ async def init_db():
                     data JSONB NOT NULL,
                     updated_at TIMESTAMP DEFAULT NOW()
                 )
+            """)
+            # Add cache_key column if it's missing (for existing tables)
+            await conn.execute("""
+                ALTER TABLE cached_products
+                ADD COLUMN IF NOT EXISTS cache_key VARCHAR(255) UNIQUE
             """)
             await conn.execute("""
                 CREATE INDEX IF NOT EXISTS idx_cached_products_key ON cached_products(cache_key)
