@@ -78,10 +78,12 @@ async def init_db():
         db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=10)
         logger.info("✅ Postgres connected for V4 caching")
 
-        # Ensure cached_products table exists
+        # Ensure cached_products table exists with correct schema
         async with db_pool.acquire() as conn:
+            # Drop old table to ensure clean schema (cache is ephemeral anyway)
+            await conn.execute("DROP TABLE IF EXISTS cached_products")
             await conn.execute("""
-                CREATE TABLE IF NOT EXISTS cached_products (
+                CREATE TABLE cached_products (
                     id SERIAL PRIMARY KEY,
                     cache_key VARCHAR(255) UNIQUE NOT NULL,
                     product_name VARCHAR(255),
