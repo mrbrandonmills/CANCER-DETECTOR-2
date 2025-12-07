@@ -2134,26 +2134,36 @@ async def scan_product_v4(image: UploadFile = File(...)):
         image_data = await image.read()
         image_base64 = base64.b64encode(image_data).decode('utf-8')
 
-        # Enhanced V4 prompt for Claude Vision
-        v4_prompt = """Analyze this product image and extract the following information:
+        # Enhanced V4 prompt for Claude Vision with category-specific extraction
+        v4_prompt = """Analyze this product image and extract information. Pay special attention to ingredient extraction based on product type:
 
-1. Product name
-2. Brand name
-3. Complete ingredients list (if visible)
-4. Product category (food, water, cosmetics, cookware, cleaning, supplements, other)
+**FOR FOOD & BEVERAGE PRODUCTS:**
+- Look for "Ingredients:" label and read the complete comma-separated list
+- Include sub-ingredients in parentheses (e.g., "cultured milk (milk, cultures)")
+- Include allergen statements (e.g., "Contains: milk, soy, tree nuts")
+- Read the full panel even if ingredients continue on multiple lines
 
-Focus on reading all ingredient text clearly. Look for:
-- Main ingredient panel
-- "Contains:" statements
-- Allergen warnings
-- Material composition (for non-food items)
+**FOR CLEANING PRODUCTS & HOUSEHOLD CHEMICALS:**
+- Look for "Active Ingredients:" section - extract ALL chemicals with their percentages
+- Look for "Inactive Ingredients:" or "Other Ingredients:" section
+- Combine BOTH active AND inactive ingredients into one array
+- Check warning labels and hazard statements for chemical names
+- Example: If label shows "Active: Alkyl dimethyl benzyl ammonium chloride 0.3%" and "Inactive: Water, fragrance", return ALL of them
 
-Return ONLY a JSON object with this exact structure:
+**FOR COSMETICS & PERSONAL CARE:**
+- Similar to cleaning products - combine active and inactive ingredients
+- Read ingredient lists in very small print (often on back/side of package)
+- Look for "Drug Facts" panels which list active ingredients separately
+- Read INCI (International Nomenclature) ingredient names
+
+**CRITICAL RULE:** Only return an empty ingredients array if the label has absolutely NO readable ingredient text. If you can see ANY chemical names, ingredient names, or material compositions, extract them. Do not return empty just because ingredients are in an unfamiliar format.
+
+Return ONLY a JSON object with this exact structure (no markdown, no extra text):
 {
-    "product_name": "Exact product name",
+    "product_name": "Exact product name from label",
     "brand": "Brand name",
     "category": "food/water/cosmetics/cookware/cleaning/supplements/other",
-    "ingredients": ["ingredient1", "ingredient2", ...],
+    "ingredients": ["ingredient1", "ingredient2", "ingredient3"],
     "confidence": "high/medium/low"
 }"""
 
