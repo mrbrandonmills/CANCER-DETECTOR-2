@@ -17,6 +17,7 @@ import base64
 import re
 import uuid
 import asyncio
+import logging
 from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,6 +26,9 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 import anthropic
 import redis
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 # V3 Modular Prompts
 from prompts import build_prompt
