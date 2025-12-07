@@ -41,18 +41,25 @@ if not ANTHROPIC_API_KEY:
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 
 # ============================================
-# REDIS SETUP
+# REDIS SETUP (DISABLED - Not needed for V4)
 # ============================================
 
+# Redis is only used for Deep Research job queue (premium feature)
+# Not required for basic V4 scanning functionality
 redis_client = None
-try:
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-    redis_client = redis.from_url(redis_url, decode_responses=True)
-    redis_client.ping()  # Test connection
-    print(f"✅ Redis connected: {redis_url}")
-except Exception as e:
-    print(f"⚠️ Redis connection failed: {e}")
-    print("Falling back to in-memory storage (jobs will be lost on restart)")
+
+# Only try to connect if REDIS_URL is explicitly set
+redis_url = os.getenv("REDIS_URL")
+if redis_url:
+    try:
+        redis_client = redis.from_url(redis_url, decode_responses=True)
+        redis_client.ping()
+        print(f"✅ Redis connected: {redis_url}")
+    except Exception as e:
+        print(f"⚠️ Redis connection failed: {e}")
+        print("Deep Research jobs will use in-memory storage")
+else:
+    print("ℹ️ Redis not configured (not required for V4 scanning)")
 
 # ============================================
 # TOXICITY DATABASE (103 ingredients)
