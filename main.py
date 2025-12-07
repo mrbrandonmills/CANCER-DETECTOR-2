@@ -25,7 +25,6 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from enum import Enum
 import anthropic
-import redis
 import asyncpg
 
 # Configure logger
@@ -45,20 +44,6 @@ if not ANTHROPIC_API_KEY:
 
 # Initialize Anthropic client
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
-
-# ============================================
-# REDIS SETUP
-# ============================================
-
-redis_client = None
-try:
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
-    redis_client = redis.from_url(redis_url, decode_responses=True)
-    redis_client.ping()  # Test connection
-    print(f"✅ Redis connected: {redis_url}")
-except Exception as e:
-    print(f"⚠️ Redis connection failed: {e}")
-    print("Falling back to in-memory storage (jobs will be lost on restart)")
 
 # ============================================
 # POSTGRES DATABASE SETUP (V4 Caching)
@@ -1775,66 +1760,45 @@ This is the "healthy brand + junk food" business model.
 
 
 # ============================================
-# V4 PHASE 3: REDIS HELPER FUNCTIONS
+# V4 PHASE 3: JOB HELPER FUNCTIONS (In-Memory)
 # ============================================
 
-def save_job_to_redis(job_id: str, job_data: dict):
-    """Save job to Redis with 24-hour expiration"""
-    if redis_client:
-        try:
-            redis_client.setex(
-                f"job:{job_id}",
-                86400,  # 24 hours in seconds
-                json.dumps(job_data)
-            )
-        except Exception as e:
-            print(f"Redis save error for {job_id}: {e}")
-            # Fallback to in-memory
-            DEEP_RESEARCH_JOBS[job_id] = DeepResearchJob(**job_data)
-    else:
-        DEEP_RESEARCH_JOBS[job_id] = DeepResearchJob(**job_data)
+def save_job(job_id: str, job_data: dict):
+    """Save job to in-memory store"""
+    DEEP_RESEARCH_JOBS[job_id] = DeepResearchJob(**job_data)
 
-def get_job_from_redis(job_id: str) -> dict | None:
-    """Retrieve job from Redis or in-memory fallback"""
-    if redis_client:
-        try:
-            job_json = redis_client.get(f"job:{job_id}")
-            if job_json:
-                return json.loads(job_json)
-        except Exception as e:
-            print(f"Redis get error for {job_id}: {e}")
-
-    # Fallback to in-memory
+def get_job(job_id: str) -> dict | None:
+    """Retrieve job from in-memory store"""
     job = DEEP_RESEARCH_JOBS.get(job_id)
     return job.dict() if job else None
 
 def update_job_progress(job_id: str, progress: int, current_step: str):
-    """Update job progress in Redis"""
-    job_data = get_job_from_redis(job_id)
+    """Update job progress"""
+    job_data = get_job(job_id)
     if job_data:
         job_data["progress"] = progress
         job_data["current_step"] = current_step
-        save_job_to_redis(job_id, job_data)
+        save_job(job_id, job_data)
 
 def complete_job(job_id: str, result: dict):
     """Mark job as completed with full report"""
-    job_data = get_job_from_redis(job_id)
+    job_data = get_job(job_id)
     if job_data:
         job_data["status"] = JobStatus.COMPLETED.value
         job_data["progress"] = 100
         job_data["current_step"] = "Complete"
         job_data["result"] = result
         job_data["completed_at"] = datetime.utcnow().isoformat()
-        save_job_to_redis(job_id, job_data)
+        save_job(job_id, job_data)
 
 def fail_job(job_id: str, error: str):
     """Mark job as failed with error message"""
-    job_data = get_job_from_redis(job_id)
+    job_data = get_job(job_id)
     if job_data:
         job_data["status"] = JobStatus.FAILED.value
         job_data["error"] = error
         job_data["completed_at"] = datetime.utcnow().isoformat()
-        save_job_to_redis(job_id, job_data)
+        save_job(job_id, job_data)
 
 # ============================================
 # V4 PHASE 3: DEEP RESEARCH BACKGROUND TASK
@@ -2741,8 +2705,8 @@ async def start_deep_research(
         "completed_at": None
     }
 
-    # Save to Redis (with fallback to in-memory)
-    save_job_to_redis(job_id, job_data)
+    # Save to in-memory store
+    save_job(job_id, job_data)
 
     # Start background task
     background_tasks.add_task(process_deep_research, job_id, request)
@@ -2768,7 +2732,7 @@ async def get_job_status(job_id: str):
     - Error message (if failed)
     """
 
-    job_data = get_job_from_redis(job_id)
+    job_data = get_job(job_id)
 
     if not job_data:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -2779,21 +2743,14 @@ async def get_job_status(job_id: str):
 @app.delete("/api/v4/admin/cleanup-jobs")
 async def cleanup_old_jobs():
     """
-    Remove jobs older than 24 hours (Redis handles this automatically via TTL).
+    Manual cleanup endpoint for in-memory jobs.
 
-    This endpoint is provided for administrative purposes, but Redis
-    automatically expires jobs after 24 hours using the setex command.
+    Jobs are stored in memory and cleared on server restart.
     """
-    if not redis_client:
-        return {
-            "message": "Redis not available, using in-memory storage",
-            "note": "In-memory jobs are cleared on server restart"
-        }
-
+    DEEP_RESEARCH_JOBS.clear()
     return {
-        "message": "Job cleanup is automatic (24-hour TTL)",
-        "redis_connected": True,
-        "cleanup_method": "Redis setex auto-expiration"
+        "message": "In-memory job store cleared",
+        "storage": "in-memory"
     }
 
 
