@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/scan_result_v4.dart';
+import '../theme/app_colors.dart';
 
 class ResultScreenV4 extends StatelessWidget {
   final ScanResultV4 result;
@@ -696,16 +697,8 @@ class ResultScreenV4 extends StatelessWidget {
   }
 
   Widget _buildIngredientItem(IngredientGraded ingredient, int index) {
-    // Map grade to color (override any backend color issues)
-    final gradeColors = {
-      'F': const Color(0xFFEF4444),  // Red
-      'D': const Color(0xFFF97316),  // Orange
-      'C': const Color(0xFFFACC15),  // Yellow
-      'B': const Color(0xFF84CC16),  // Lime green
-      'A': const Color(0xFF22C55E),  // Bright green
-      'A+': const Color(0xFF22C55E), // Bright green
-    };
-    final gradeColor = gradeColors[ingredient.grade] ?? const Color(0xFFEF4444);
+    // Use centralized color system from AppColors
+    final gradeColor = AppColors.getGradeColor(ingredient.grade);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),

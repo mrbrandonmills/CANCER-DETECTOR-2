@@ -231,33 +231,33 @@ class _ScanScreenState extends State<ScanScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Animated scanning indicator
+            // Premium pulsing gradient circle
             Container(
               width: 120,
               height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: LinearGradient(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                   colors: [
-                    const Color(0xFF8b5cf6).withOpacity(0.3),
-                    const Color(0xFF06b6d4).withOpacity(0.3),
+                    Color(0xFF06B6D4), // Cyan
+                    Color(0xFF8B5CF6), // Purple
                   ],
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF06B6D4).withOpacity(0.5),
+                    blurRadius: 30,
+                    spreadRadius: 0,
+                  ),
+                ],
               ),
-              child: Center(
-                child: Container(
-                  width: 100,
-                  height: 100,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: const Color(0xFF1e293b),
-                  ),
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF8b5cf6)),
-                      strokeWidth: 3,
-                    ),
-                  ),
+              child: const Center(
+                child: Icon(
+                  Icons.search_rounded,
+                  color: Colors.white,
+                  size: 48,
                 ),
               ),
             ),
@@ -269,17 +269,17 @@ class _ScanScreenState extends State<ScanScreen> {
               child: Column(
                 children: [
                   Text(
-                    _statusMessage ?? 'Processing...',
+                    _statusMessage ?? 'Analyzing Product...',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
-                      fontSize: 18,
+                      fontSize: 20,
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
                     ),
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'This may take a few seconds',
+                    'Researching ingredients & safety data',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontSize: 14,

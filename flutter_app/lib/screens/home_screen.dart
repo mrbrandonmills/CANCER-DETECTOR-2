@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:provider/provider.dart';
 import '../services/scan_history_service.dart';
+import '../theme/app_colors.dart';
 import 'scan_screen.dart';
 import 'history_screen.dart';
 
@@ -11,118 +12,37 @@ class HomeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppColors.background,
       body: SafeArea(
         child: Consumer<ScanHistoryService>(
           builder: (context, historyService, child) {
-            return CustomScrollView(
-              slivers: [
-                // App Bar
-                SliverAppBar(
-                  expandedHeight: 60,
-                  floating: true,
-                  title: const Text(
-                    'Cancer Detector',
-                    style: TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.history),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const HistoryScreen()),
-                      ),
-                    ),
-                  ],
-                ),
-                
-                SliverPadding(
-                  padding: const EdgeInsets.all(20),
-                  sliver: SliverList(
-                    delegate: SliverChildListDelegate([
-                      // Overall Score Card
-                      _buildScoreCard(context, historyService)
-                          .animate()
-                          .fadeIn(duration: 500.ms)
-                          .slideY(begin: -0.2, end: 0),
-                      
-                      const SizedBox(height: 30),
-                      
-                      // Scan Options
-                      Text(
-                        'Scan a Product',
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ).animate().fadeIn(delay: 200.ms),
-                      
-                      const SizedBox(height: 16),
-                      
-                      // Photo Scan Button
-                      _buildScanButton(
-                        context,
-                        icon: Icons.camera_alt,
-                        title: 'Scan Product',
-                        subtitle: 'Take a photo of any product label',
-                        color: const Color(0xFF8b5cf6),
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const ScanScreen(),
-                          ),
-                        ),
-                      ).animate().fadeIn(delay: 300.ms).slideX(begin: -0.2),
-                      
-                      const SizedBox(height: 30),
-                      
-                      // Stats
-                      if (historyService.totalScans > 0) ...[
-                        Text(
-                          'Your Stats',
-                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ).animate().fadeIn(delay: 600.ms),
-                        
-                        const SizedBox(height: 16),
-                        
-                        Row(
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => const HistoryScreen()),
-                                ),
-                                child: _buildStatCard(
-                                  context,
-                                  '${historyService.totalScans}',
-                                  'Products\nScanned',
-                                  Icons.inventory_2,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => Navigator.push(
-                                  context,
-                                  MaterialPageRoute(builder: (_) => const HistoryScreen()),
-                                ),
-                                child: _buildStatCard(
-                                  context,
-                                  '${historyService.totalScans}',
-                                  'Scan\nHistory',
-                                  Icons.history,
-                                  isWarning: false,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ).animate().fadeIn(delay: 700.ms),
+            return Column(
+              children: [
+                // TOP: Minimal header with logo
+                _buildHeader(context),
+
+                // CENTER: Hero scan button
+                Expanded(
+                  child: Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        _buildScanButton(context)
+                            .animate()
+                            .fadeIn(duration: 600.ms)
+                            .scale(begin: const Offset(0.8, 0.8), delay: 100.ms),
+                        const SizedBox(height: 40),
+                        _buildTagline().animate().fadeIn(delay: 400.ms),
                       ],
-                    ]),
+                    ),
                   ),
                 ),
+
+                // BOTTOM: Stats bar
+                _buildStatsBar(context, historyService)
+                    .animate()
+                    .fadeIn(delay: 600.ms)
+                    .slideY(begin: 0.3),
               ],
             );
           },
@@ -130,227 +50,202 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
-  
-  Widget _buildScoreCard(BuildContext context, ScanHistoryService historyService) {
-    final score = historyService.overallScore.round();
-    final color = _getScoreColor(historyService.overallScoreColor);
-    
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color.withOpacity(0.8), color],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+
+  Widget _buildHeader(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          // Logo/Brand
+          Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  gradient: AppColors.accentGradient,
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.accentPrimary.withOpacity(0.3),
+                      blurRadius: 12,
+                      spreadRadius: 0,
+                    ),
+                  ],
+                ),
+                child: const Icon(
+                  Icons.shield_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'TrueCancer',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: -0.5,
+                ),
+              ),
+            ],
+          ),
+          // History icon
+          IconButton(
+            icon: const Icon(
+              Icons.history_rounded,
+              color: AppColors.textSecondary,
+            ),
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const HistoryScreen()),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildScanButton(BuildContext context) {
+    return GestureDetector(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const ScanScreen()),
+      ),
+      child: Container(
+        width: 200,
+        height: 200,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: AppColors.accentGradient,
+          boxShadow: [
+            // Outer glow
+            BoxShadow(
+              color: AppColors.accentPrimary.withOpacity(0.4),
+              blurRadius: 40,
+              spreadRadius: 0,
+            ),
+            // Inner definition
+            BoxShadow(
+              color: AppColors.accentPrimary.withOpacity(0.2),
+              blurRadius: 20,
+              spreadRadius: -5,
+            ),
+          ],
         ),
-        borderRadius: BorderRadius.circular(24),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.camera_alt_rounded,
+              size: 64,
+              color: Colors.white,
+            ),
+            SizedBox(height: 12),
+            Text(
+              'SCAN',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 24,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 4,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTagline() {
+    return const Column(
+      children: [
+        Text(
+          'Know What\'s Really Inside',
+          style: TextStyle(
+            color: AppColors.textPrimary,
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
+            letterSpacing: -0.5,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        SizedBox(height: 8),
+        Text(
+          'AI-powered product safety analysis',
+          style: TextStyle(
+            color: AppColors.textSecondary,
+            fontSize: 16,
+            fontWeight: FontWeight.w400,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatsBar(BuildContext context, ScanHistoryService service) {
+    return Container(
+      margin: const EdgeInsets.all(24),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCard,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.white.withOpacity(0.05),
+        ),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.3),
+            color: Colors.black.withOpacity(0.2),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: Column(
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
         children: [
-          Text(
-            'Your Cancer Score',
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
-              fontSize: 16,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '$score',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 72,
-                  fontWeight: FontWeight.bold,
-                  height: 1,
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.only(bottom: 12),
-                child: Text(
-                  '/100',
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            _getScoreMessage(score),
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.9),
-              fontSize: 14,
-            ),
-          ),
-          if (historyService.totalScans == 0) ...[
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Scan your first product to start tracking!',
-                style: TextStyle(color: Colors.white, fontSize: 12),
-              ),
-            ),
-          ],
+          _buildStat('Products\nAnalyzed', '50K+'),
+          _buildDivider(),
+          _buildStat('Chemicals\nTracked', '10K+'),
+          _buildDivider(),
+          _buildStat('Your\nScans', '${service.totalScans}'),
         ],
       ),
     );
   }
-  
-  Widget _buildScanButton(
-    BuildContext context, {
-    required IconData icon,
-    required String title,
-    required String subtitle,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Theme.of(context).colorScheme.outline.withOpacity(0.2),
-            ),
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(icon, color: color, size: 28),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-                        fontSize: 13,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
-                color: Theme.of(context).colorScheme.onSurface.withOpacity(0.3),
-              ),
-            ],
+
+  Widget _buildStat(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            color: AppColors.accentPrimary,
+            fontSize: 22,
+            fontWeight: FontWeight.w700,
           ),
         ),
-      ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            color: AppColors.textTertiary,
+            fontSize: 11,
+            height: 1.2,
+          ),
+        ),
+      ],
     );
   }
-  
-  Widget _buildStatCard(
-    BuildContext context,
-    String value,
-    String label,
-    IconData icon, {
-    bool isWarning = false,
-  }) {
+
+  Widget _buildDivider() {
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: isWarning 
-              ? Colors.orange.withOpacity(0.3)
-              : Theme.of(context).colorScheme.outline.withOpacity(0.2),
-        ),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            icon,
-            size: 24,
-            color: isWarning ? Colors.orange : Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: isWarning ? Colors.orange : null,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
-            ),
-          ),
-        ],
-      ),
+      height: 40,
+      width: 1,
+      color: Colors.white.withOpacity(0.1),
     );
-  }
-  
-  Color _getScoreColor(String colorName) {
-    switch (colorName) {
-      case 'green':
-        return const Color(0xFF4CAF50);
-      case 'yellow':
-        return const Color(0xFFFFC107);
-      case 'orange':
-        return const Color(0xFFFF9800);
-      case 'red':
-        return const Color(0xFFF44336);
-      default:
-        return const Color(0xFF4CAF50);
-    }
-  }
-  
-  String _getScoreMessage(int score) {
-    if (score >= 80) return '🌟 Excellent! You\'re making healthy choices.';
-    if (score >= 60) return '👍 Good! Some room for improvement.';
-    if (score >= 40) return '⚠️ Moderate risk. Consider healthier alternatives.';
-    return '🚨 High toxicity exposure detected. Time to make changes!';
   }
 }
