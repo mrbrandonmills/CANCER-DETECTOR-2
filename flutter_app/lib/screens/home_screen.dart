@@ -88,21 +88,33 @@ class HomeScreen extends StatelessWidget {
                         Row(
                           children: [
                             Expanded(
-                              child: _buildStatCard(
-                                context,
-                                '${historyService.totalScans}',
-                                'Products\nScanned',
-                                Icons.inventory_2,
+                              child: GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                                ),
+                                child: _buildStatCard(
+                                  context,
+                                  '${historyService.totalScans}',
+                                  'Products\nScanned',
+                                  Icons.inventory_2,
+                                ),
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: _buildStatCard(
-                                context,
-                                '${historyService.carcinogensFound}',
-                                'Carcinogens\nFound',
-                                Icons.warning_amber,
-                                isWarning: historyService.carcinogensFound > 0,
+                              child: GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(builder: (_) => const HistoryScreen()),
+                                ),
+                                child: _buildStatCard(
+                                  context,
+                                  '${historyService.totalScans}',
+                                  'Scan\nHistory',
+                                  Icons.history,
+                                  isWarning: false,
+                                ),
                               ),
                             ),
                           ],
