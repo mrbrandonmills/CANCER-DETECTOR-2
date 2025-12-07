@@ -2182,6 +2182,9 @@ Return ONLY a JSON object with this exact structure:
         # Parse Claude's response
         response_text = message.content[0].text
 
+        # LOG RAW RESPONSE FOR DEBUGGING
+        logger.info(f"[V4 RAW CLAUDE VISION RESPONSE] {response_text[:1000]}")  # First 1000 chars
+
         # Extract JSON from response
         try:
             # Try to find JSON in the response
@@ -2206,6 +2209,9 @@ Return ONLY a JSON object with this exact structure:
             "ingredients": analysis.get("ingredients", []),
             "confidence": analysis.get("confidence", "medium")
         }
+
+        # LOG EXTRACTED DATA FOR DEBUGGING
+        logger.info(f"[V4 EXTRACTED] Product: {product_data['product_name']}, Brand: {product_data['brand']}, Ingredients count: {len(product_data['ingredients'])}, Ingredients: {product_data['ingredients'][:10]}")  # First 10 ingredients
 
         # Calculate V4 score
         v4_results = calculate_v4_score(product_data)
