@@ -2311,6 +2311,22 @@ CRITICAL RULES:
             json_str = response_text[json_start:json_end]
             result = json.loads(json_str)
 
+            # Normalize arrays (fix Claude returning strings instead of arrays)
+            if isinstance(result.get('alerts'), str):
+                result['alerts'] = [result['alerts']] if result['alerts'] else []
+            if isinstance(result.get('hidden_truths'), str):
+                result['hidden_truths'] = [result['hidden_truths']] if result['hidden_truths'] else []
+            if isinstance(result.get('ingredients_graded'), str):
+                result['ingredients_graded'] = []
+
+            # Ensure arrays exist (defensive)
+            if 'alerts' not in result or result['alerts'] is None:
+                result['alerts'] = []
+            if 'hidden_truths' not in result or result['hidden_truths'] is None:
+                result['hidden_truths'] = []
+            if 'ingredients_graded' not in result or result['ingredients_graded'] is None:
+                result['ingredients_graded'] = []
+
             logger.info(f"[V4 RESEARCH] Successfully researched {product_name}: {len(result.get('ingredients_graded', []))} ingredients, score={result.get('overall_score')}")
             return result
         else:
