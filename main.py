@@ -2117,6 +2117,8 @@ async def scan_product_v4(image: UploadFile = File(...)):
 
     Returns hidden truths, corporate ownership, and tiered ingredient grading.
     """
+    # FIRST LINE - PROVE FUNCTION IS CALLED
+    logger.info(f"[V4 SCAN START] Received image: {image.filename}, type: {image.content_type}")
 
     # Validate content type
     allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
