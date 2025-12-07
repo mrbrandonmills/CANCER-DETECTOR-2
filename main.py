@@ -26,6 +26,7 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 import anthropic
 import redis
+import asyncpg
 
 # Configure logger
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:     %(message)s')
@@ -58,6 +59,54 @@ try:
 except Exception as e:
     print(f"⚠️ Redis connection failed: {e}")
     print("Falling back to in-memory storage (jobs will be lost on restart)")
+
+# ============================================
+# POSTGRES DATABASE SETUP (V4 Caching)
+# ============================================
+
+db_pool = None
+
+async def init_db():
+    """Initialize Postgres connection pool on startup"""
+    global db_pool
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        logger.warning("⚠️ DATABASE_URL not set - caching disabled")
+        return
+
+    try:
+        db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=10)
+        logger.info("✅ Postgres connected for V4 caching")
+
+        # Ensure cached_products table exists
+        async with db_pool.acquire() as conn:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS cached_products (
+                    id SERIAL PRIMARY KEY,
+                    cache_key VARCHAR(255) UNIQUE NOT NULL,
+                    product_name VARCHAR(255),
+                    brand VARCHAR(255),
+                    data JSONB NOT NULL,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_cached_products_key ON cached_products(cache_key)
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_cached_products_updated ON cached_products(updated_at)
+            """)
+        logger.info("✅ Cached_products table ready")
+    except Exception as e:
+        logger.error(f"❌ Postgres connection failed: {e}")
+        db_pool = None
+
+async def close_db():
+    """Close Postgres connection pool on shutdown"""
+    global db_pool
+    if db_pool:
+        await db_pool.close()
+        logger.info("Postgres connection closed")
 
 # ============================================
 # TOXICITY DATABASE (103 ingredients)
@@ -830,6 +879,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ============================================
+# STARTUP/SHUTDOWN EVENTS
+# ============================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database connection on startup"""
+    await init_db()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close database connection on shutdown"""
+    await close_db()
 
 # ============================================
 # MODELS
@@ -2102,6 +2165,228 @@ async def scan_product_base64(data: dict):
 
 
 # ============================================
+# V4 RESEARCH FUNCTIONS (NEW ARCHITECTURE)
+# ============================================
+
+async def research_product(product_name: str, brand: str, category: str, visible_ingredients: list) -> dict:
+    """
+    V4 NEW ARCHITECTURE: Claude researches the product using its knowledge base.
+    This is the BRAIN of V4 - Claude synthesizes real safety data.
+
+    Args:
+        product_name: Product name from vision
+        brand: Brand name from vision
+        category: Product category
+        visible_ingredients: Any ingredients read from label (may be empty)
+
+    Returns:
+        Complete V4 analysis with grades, scores, hidden truths, corporate info
+    """
+
+    research_prompt = f"""You are TrueCancer's product safety researcher. Research this product thoroughly using your knowledge base.
+
+PRODUCT: {product_name}
+BRAND: {brand}
+CATEGORY: {category}
+VISIBLE INGREDIENTS (from label): {visible_ingredients if visible_ingredients else "None readable - you must research typical formulation"}
+
+YOUR TASK:
+1. **IDENTIFY ACTUAL INGREDIENTS** (from your knowledge, SDS data, typical formulations for this product):
+   - If this is Clorox Disinfecting Wipes, you know it contains: quaternary ammonium compounds, fragrances, isopropanol, surfactants
+   - If this is Cheez-Its, you know it contains: enriched flour, vegetable oil, cheese, salt, TBHQ, Yellow 5, Yellow 6
+   - Research what's REALLY in this product, even if not shown on label
+
+2. **GRADE EACH INGREDIENT** using this exact system:
+   - **F (Red)**: IARC Group 1 carcinogens, banned in EU, known endocrine disruptors (formaldehyde, BHA, parabens)
+   - **D (Orange)**: IARC 2B possible carcinogens, requires EU warnings, GRAS-exploited (TBHQ, artificial colors, sodium nitrite)
+   - **C (Yellow)**: Processed ingredients, GMO-derived, environmental concerns (HFCS, palm oil, "natural flavors")
+   - **B (Green)**: Minimally processed, minor concerns (canola oil, sugar, cornstarch)
+   - **A (Green)**: Whole foods, certified organic, no concerns (water, organic wheat, sea salt)
+
+3. **RESEARCH PARENT COMPANY**:
+   - Who owns this brand? (e.g., Kellogg's owns Cheez-Its, Clorox Company owns Clorox)
+   - Any EPA fines, lawsuits, settlements, controversies?
+   - Part of Big 10 conglomerates? (Nestlé, PepsiCo, Kraft Heinz, General Mills, Kellogg's, Mars, Mondelez, Coca-Cola, ConAgra, Unilever)
+
+4. **GENERATE HIDDEN TRUTHS** - what consumers should know that's NOT on the label:
+   - Specific dollar amounts of fines/settlements
+   - Which countries have banned ingredients
+   - GRAS loopholes exploited
+   - Corporate ownership connections
+   - Environmental impacts
+
+5. **CALCULATE DIMENSION SCORES** (0-100):
+   - **ingredient_safety**: Average of all ingredient scores (F=0, D=35, C=55, B=80, A=95)
+   - **processing_level**: 90 if whole foods, 60 if processed, 30 if ultra-processed
+   - **corporate_ethics**: 70 baseline, subtract 10-30 for each major controversy/fine
+   - **supply_chain**: 50 default, +10 for organic/fair trade, -10 for monoculture crops
+
+6. **CALCULATE OVERALL SCORE**:
+   - Formula: (ingredient_safety × 0.40) + (processing_level × 0.25) + (corporate_ethics × 0.20) + (supply_chain × 0.15)
+   - CRITICAL: If ANY F-grade ingredient exists, cap overall_score at 49 max
+   - If ANY D-grade ingredient exists and no F, cap at 69 max
+
+7. **DETERMINE OVERALL GRADE**:
+   - A+ (95-100), A (85-94), B (70-84), C (50-69), D (30-49), F (0-29)
+
+RETURN THIS EXACT JSON (no markdown, no extra text):
+{{
+  "product_name": "{product_name}",
+  "brand": "{brand}",
+  "category": "{category}",
+  "overall_score": <number 0-100>,
+  "overall_grade": "<letter grade>",
+  "dimension_scores": {{
+    "ingredient_safety": <0-100>,
+    "processing_level": <0-100>,
+    "corporate_ethics": <0-100>,
+    "supply_chain": <0-100>
+  }},
+  "ingredients_graded": [
+    {{
+      "name": "<ingredient name>",
+      "grade": "<F/D/C/B/A>",
+      "hazard_score": <0-100 where F=0-29, D=30-49, C=50-69, B=70-84, A=85-100>,
+      "description": "<why this grade - max 150 chars>",
+      "tier": <1 for F, 2 for D, 3 for C, 4 for B/A>
+    }}
+  ],
+  "alerts": [
+    "🔴 AVOID: <F-grade ingredient>",
+    "🟠 LIMIT: <D-grade ingredient>",
+    "🏭 ULTRA-PROCESSED: <count> processing markers",
+    "📍 OWNED BY: <parent company>"
+  ],
+  "hidden_truths": [
+    "💊 HIDDEN TRUTH: <specific fact with numbers/dates/countries>",
+    "📍 CORPORATE OWNERSHIP: <parent company details>",
+    "⚖️ LEGAL ISSUES: <specific fines/lawsuits with dollar amounts>"
+  ],
+  "corporate_disclosure": {{
+    "parent_company": "<name or null>",
+    "penalty_applied": <number like -10, -20, -30>,
+    "issues": "<specific controversies, lawsuits, EPA fines with dates and amounts>"
+  }}
+}}
+
+CRITICAL RULES:
+- Sort ingredients_graded by hazard_score DESCENDING (worst first)
+- Be specific in hidden_truths (include dates, dollar amounts, country names)
+- If you don't know an ingredient's safety, grade it C with "Insufficient safety data"
+- ALWAYS return valid JSON with all required fields
+- Do NOT invent ingredients - only include what you know is actually in this product
+- For cleaning products, include both active AND inactive ingredients you know about
+"""
+
+    try:
+        # Call Claude API for research
+        response = client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=3000,
+            messages=[{
+                "role": "user",
+                "content": research_prompt
+            }]
+        )
+
+        # Extract JSON from response
+        response_text = response.content[0].text
+
+        # Remove markdown if present
+        if "```json" in response_text:
+            json_start = response_text.find("```json") + 7
+            json_end = response_text.find("```", json_start)
+            response_text = response_text[json_start:json_end].strip()
+        elif "```" in response_text:
+            json_start = response_text.find("```") + 3
+            json_end = response_text.find("```", json_start)
+            response_text = response_text[json_start:json_end].strip()
+
+        # Find JSON object
+        json_start = response_text.find('{')
+        json_end = response_text.rfind('}') + 1
+        if json_start != -1 and json_end > json_start:
+            json_str = response_text[json_start:json_end]
+            result = json.loads(json_str)
+
+            logger.info(f"[V4 RESEARCH] Successfully researched {product_name}: {len(result.get('ingredients_graded', []))} ingredients, score={result.get('overall_score')}")
+            return result
+        else:
+            raise ValueError("No JSON found in research response")
+
+    except Exception as e:
+        logger.error(f"[V4 RESEARCH ERROR] {str(e)}")
+        # Return fallback response
+        return {
+            "product_name": product_name,
+            "brand": brand,
+            "category": category,
+            "overall_score": 50,
+            "overall_grade": "C",
+            "dimension_scores": {
+                "ingredient_safety": 50,
+                "processing_level": 50,
+                "corporate_ethics": 50,
+                "supply_chain": 50
+            },
+            "ingredients_graded": [],
+            "alerts": ["⚠️ Research temporarily unavailable"],
+            "hidden_truths": [],
+            "corporate_disclosure": None
+        }
+
+
+async def get_product_analysis(product_name: str, brand: str, category: str, visible_ingredients: list) -> dict:
+    """
+    V4 NEW ARCHITECTURE: Check cache first, research if needed, cache the result.
+
+    Uses Postgres cached_products table for 7-day caching.
+    """
+    global db_pool
+
+    # Create cache key from brand:product_name
+    cache_key = f"{brand}:{product_name}".lower().strip()
+
+    # Check Postgres cache (7-day TTL)
+    if db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                cached = await conn.fetchrow("""
+                    SELECT data, updated_at
+                    FROM cached_products
+                    WHERE cache_key = $1 AND updated_at > NOW() - INTERVAL '7 days'
+                """, cache_key)
+
+                if cached:
+                    logger.info(f"[V4 CACHE HIT] {cache_key}")
+                    return json.loads(cached["data"])
+        except Exception as e:
+            logger.warning(f"[V4 CACHE CHECK ERROR] {str(e)}")
+
+    # Cache miss - research the product
+    logger.info(f"[V4 CACHE MISS] {cache_key} - researching with Claude...")
+
+    result = await research_product(product_name, brand, category, visible_ingredients)
+
+    # Save to cache
+    if db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                await conn.execute("""
+                    INSERT INTO cached_products (cache_key, product_name, brand, data, updated_at)
+                    VALUES ($1, $2, $3, $4, NOW())
+                    ON CONFLICT (cache_key) DO UPDATE SET
+                        data = $4,
+                        updated_at = NOW()
+                """, cache_key, product_name, brand, json.dumps(result))
+            logger.info(f"[V4 CACHE SAVED] {cache_key}")
+        except Exception as e:
+            logger.warning(f"[V4 CACHE SAVE ERROR] {str(e)}")
+
+    return result
+
+
+# ============================================
 # V4 SCAN ENDPOINT
 # ============================================
 
@@ -2134,132 +2419,83 @@ async def scan_product_v4(image: UploadFile = File(...)):
         image_data = await image.read()
         image_base64 = base64.b64encode(image_data).decode('utf-8')
 
-        # Enhanced V4 prompt for Claude Vision with category-specific extraction
-        v4_prompt = """Analyze this product image and extract information. Pay special attention to ingredient extraction based on product type:
+        # V4 NEW ARCHITECTURE: Vision only identifies product, doesn't need ingredients
+        vision_prompt = """Look at this product image and extract basic identification:
 
-**FOR FOOD & BEVERAGE PRODUCTS:**
-- Look for "Ingredients:" label and read the complete comma-separated list
-- Include sub-ingredients in parentheses (e.g., "cultured milk (milk, cultures)")
-- Include allergen statements (e.g., "Contains: milk, soy, tree nuts")
-- Read the full panel even if ingredients continue on multiple lines
+1. product_name: The exact product name from the package
+2. brand: The brand/manufacturer name
+3. category: One of [food, beverage, cleaning, cosmetics, household, supplement, cookware, other]
+4. visible_ingredients: Any ingredients you can clearly read (may be empty - that's OK)
 
-**FOR CLEANING PRODUCTS & HOUSEHOLD CHEMICALS:**
-- Look for "Active Ingredients:" section - extract ALL chemicals with their percentages
-- Look for "Inactive Ingredients:" or "Other Ingredients:" section
-- Combine BOTH active AND inactive ingredients into one array
-- Check warning labels and hazard statements for chemical names
-- Example: If label shows "Active: Alkyl dimethyl benzyl ammonium chloride 0.3%" and "Inactive: Water, fragrance", return ALL of them
-
-**FOR COSMETICS & PERSONAL CARE:**
-- Similar to cleaning products - combine active and inactive ingredients
-- Read ingredient lists in very small print (often on back/side of package)
-- Look for "Drug Facts" panels which list active ingredients separately
-- Read INCI (International Nomenclature) ingredient names
-
-**CRITICAL RULE:** Only return an empty ingredients array if the label has absolutely NO readable ingredient text. If you can see ANY chemical names, ingredient names, or material compositions, extract them. Do not return empty just because ingredients are in an unfamiliar format.
-
-Return ONLY a JSON object with this exact structure (no markdown, no extra text):
+Return ONLY valid JSON (no markdown, no extra text):
 {
-    "product_name": "Exact product name from label",
-    "brand": "Brand name",
-    "category": "food/water/cosmetics/cookware/cleaning/supplements/other",
-    "ingredients": ["ingredient1", "ingredient2", "ingredient3"],
-    "confidence": "high/medium/low"
-}"""
+  "product_name": "...",
+  "brand": "...",
+  "category": "...",
+  "visible_ingredients": []
+}
 
-        # Call Claude Vision API
-        message = client.messages.create(
+IMPORTANT: If you cannot read ingredients clearly, return empty array - that's completely fine. Your main job is to identify the product."""
+
+        # Step 1: Vision extracts product identification (NOT ingredients)
+        vision_message = client.messages.create(
             model="claude-sonnet-4-20250514",
-            max_tokens=2048,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": image.content_type,
-                                "data": image_base64,
-                            },
-                        },
-                        {
-                            "type": "text",
-                            "text": v4_prompt
+            max_tokens=500,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": image.content_type,
+                            "data": image_base64
                         }
-                    ],
-                }
-            ],
+                    },
+                    {
+                        "type": "text",
+                        "text": vision_prompt
+                    }
+                ]
+            }]
         )
 
-        # Parse Claude's response
-        response_text = message.content[0].text
+        # Parse vision response
+        vision_text = vision_message.content[0].text
+        logger.info(f"[V4 VISION RESPONSE] {vision_text[:500]}")
 
-        # LOG RAW RESPONSE FOR DEBUGGING
-        logger.info(f"[V4 RAW CLAUDE VISION RESPONSE] {response_text[:1000]}")  # First 1000 chars
+        # Extract JSON
+        json_start = vision_text.find('{')
+        json_end = vision_text.rfind('}') + 1
+        if json_start != -1 and json_end > json_start:
+            vision_json = vision_text[json_start:json_end]
+            vision_data = json.loads(vision_json)
+        else:
+            raise HTTPException(status_code=500, detail="Failed to parse vision response")
 
-        # Extract JSON from response
-        try:
-            # Try to find JSON in the response
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
-            if json_start != -1 and json_end > json_start:
-                json_str = response_text[json_start:json_end]
-                analysis = json.loads(json_str)
-            else:
-                raise ValueError("No JSON found in response")
-        except (json.JSONDecodeError, ValueError) as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to parse AI response: {str(e)}"
-            )
+        logger.info(f"[V4 VISION] Product: {vision_data.get('product_name')}, Brand: {vision_data.get('brand')}, Category: {vision_data.get('category')}")
 
-        # Prepare product data for V4 scoring
-        product_data = {
-            "product_name": analysis.get("product_name", "Unknown Product"),
-            "brand": analysis.get("brand", "Unknown Brand"),
-            "category": analysis.get("category", "other"),
-            "ingredients": analysis.get("ingredients", []),
-            "confidence": analysis.get("confidence", "medium")
-        }
-
-        # LOG EXTRACTED DATA FOR DEBUGGING
-        logger.info(f"[V4 EXTRACTED] Product: {product_data['product_name']}, Brand: {product_data['brand']}, Ingredients count: {len(product_data['ingredients'])}, Ingredients: {product_data['ingredients'][:10]}")  # First 10 ingredients
-
-        # Calculate V4 score
-        v4_results = calculate_v4_score(product_data)
+        # Step 2: Get full analysis (cache or research)
+        analysis = await get_product_analysis(
+            product_name=vision_data.get("product_name", "Unknown Product"),
+            brand=vision_data.get("brand", "Unknown Brand"),
+            category=vision_data.get("category", "other"),
+            visible_ingredients=vision_data.get("visible_ingredients", [])
+        )
 
         # Generate unique report ID
         report_id = f"V4-{datetime.now().strftime('%Y%m%d%H%M%S')}-{os.urandom(4).hex().upper()}"
 
-        # Build response
+        # Build final response
         response = {
             "success": True,
             "version": "4.0.0",
-            "product_name": product_data["product_name"],
-            "brand": product_data["brand"],
-            "category": product_data["category"],
-            "ingredients": product_data["ingredients"],
-            "confidence": product_data["confidence"],
-
-            # V4 Scoring
-            "overall_score": v4_results["overall_score"],
-            "overall_grade": v4_results["overall_grade"],
-            "dimension_scores": v4_results["dimension_scores"],
-
-            # Tiered Ingredients (sorted worst-first)
-            "ingredients_graded": v4_results["ingredients_graded"],
-
-            # Consumer Protection
-            "alerts": v4_results["alerts"],
-            "hidden_truths": v4_results["hidden_truths"],
-            "parent_company": v4_results.get("parent_company"),
-            "corporate_disclosure": v4_results.get("corporate_disclosure"),
-
-            # Metadata
+            **analysis,  # Include all research results
             "report_id": report_id,
             "timestamp": datetime.now().isoformat()
         }
+
+        logger.info(f"[V4 COMPLETE] {analysis['product_name']}: Score={analysis['overall_score']}, Grade={analysis['overall_grade']}, Ingredients={len(analysis.get('ingredients_graded', []))}")
 
         return response
 
