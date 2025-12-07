@@ -1877,8 +1877,11 @@ async def health():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "3.0.0",
+        "version": "4.0.0-V4-LOGGING-ENABLED",
         "v3_ready": True,
+        "v4_ready": True,
+        "v4_logging": True,
+        "git_commit": "a3be969",
         "claude_api": "connected" if client else "not configured",
         "modular_prompts": True,
         "categories": ["food", "water", "cosmetics", "cookware", "cleaning", "supplements"]
