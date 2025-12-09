@@ -4,11 +4,11 @@ AI-powered product safety scanner for iOS that analyzes household products and p
 
 ## Project Overview
 
-**Version:** 3.0.0+1
-**Status:** V3 Deployed - Ready for Production Testing
+**Version:** 4.2.0+1
+**Status:** V4 Deployed - Ready for Production Testing
 **Platform:** iOS (Flutter)
-**Backend:** FastAPI V3.0.0 on Railway (Modular Prompts Architecture)
-**AI Model:** Claude Sonnet 4 (claude-sonnet-4-20250514)
+**Backend:** FastAPI V4.2.0 on Railway (Modular Prompts Architecture)
+**AI Model:** Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 ## Architecture
 
@@ -405,6 +405,6 @@ curl -X POST https://cancer-detector-backend-production.up.railway.app/api/v1/sc
 
 ---
 
-*Last Updated: December 1, 2025*
-*Version: 2.0.0+1*
-*Backend: v3.1.0*
+*Last Updated: December 9, 2025*
+*Version: 4.2.0+1*
+*Backend: v4.2.0*

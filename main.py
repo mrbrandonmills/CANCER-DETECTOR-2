@@ -63,11 +63,16 @@ async def init_db():
         db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=10)
         logger.info("✅ Postgres connected for V4 caching")
 
-        # Ensure cached_products table exists with correct schema
+        # NUCLEAR FIX: Drop and recreate table to ensure correct schema
+        # This is safe because cached_products only stores cache data (Claude regenerates on miss)
         async with db_pool.acquire() as conn:
-            # Create table if it doesn't exist
+            # Drop existing table with wrong schema
+            await conn.execute("DROP TABLE IF EXISTS cached_products CASCADE")
+            logger.info("🗑️ Dropped old cached_products table (if existed)")
+
+            # Create fresh table with correct schema
             await conn.execute("""
-                CREATE TABLE IF NOT EXISTS cached_products (
+                CREATE TABLE cached_products (
                     id SERIAL PRIMARY KEY,
                     cache_key VARCHAR(255) UNIQUE NOT NULL,
                     product_name VARCHAR(255),
@@ -76,18 +81,15 @@ async def init_db():
                     updated_at TIMESTAMP DEFAULT NOW()
                 )
             """)
-            # Add cache_key column if it's missing (for existing tables)
+
+            # Create indexes for performance
             await conn.execute("""
-                ALTER TABLE cached_products
-                ADD COLUMN IF NOT EXISTS cache_key VARCHAR(255) UNIQUE
+                CREATE INDEX idx_cached_products_key ON cached_products(cache_key)
             """)
             await conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_cached_products_key ON cached_products(cache_key)
+                CREATE INDEX idx_cached_products_updated ON cached_products(updated_at)
             """)
-            await conn.execute("""
-                CREATE INDEX IF NOT EXISTS idx_cached_products_updated ON cached_products(updated_at)
-            """)
-        logger.info("✅ Cached_products table ready")
+        logger.info("✅ Cached_products table created with correct schema")
     except Exception as e:
         logger.error(f"❌ Postgres connection failed: {e}")
         db_pool = None
@@ -1102,7 +1104,7 @@ IMPORTANT:
 
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-5-20251101",
             max_tokens=2048,
             messages=[
                 {
@@ -1841,7 +1843,7 @@ async def process_deep_research(job_id: str, request_data: DeepResearchRequest):
 
         # Call Claude for deep research
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-5-20251101",
             max_tokens=8000,  # Comprehensive report needs more tokens
             temperature=0.3,  # Lower temp for factual research
             messages=[{
@@ -1905,7 +1907,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "3.1.0",
+        "version": "4.2.0",
         "claude_api": "connected" if client else "not configured"
     }
 
@@ -1915,7 +1917,7 @@ async def health():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "3.0.0",
+        "version": "4.2.0",
         "v3_ready": True,
         "claude_api": "connected" if client else "not configured",
         "modular_prompts": True,
@@ -2251,7 +2253,7 @@ CRITICAL RULES:
     try:
         # Call Claude API for research
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-5-20251101",
             max_tokens=3000,
             messages=[{
                 "role": "user",
@@ -2322,6 +2324,48 @@ CRITICAL RULES:
         }
 
 
+def normalize_cache_key(brand: str, product_name: str) -> str:
+    """
+    Normalize product name for consistent cache keys.
+    Removes variants, scents, sizes to match same base product.
+    """
+    import re
+
+    # Lowercase and strip
+    brand_clean = brand.lower().strip()
+    name_clean = product_name.lower().strip()
+
+    # Remove common variant descriptors (scents, sizes, etc.)
+    variant_patterns = [
+        r'\s*-\s*.*$',  # Everything after dash
+        r'\s+lemon.*',
+        r'\s+fresh.*',
+        r'\s+original.*',
+        r'\s+crisp.*',
+        r'\s+clean.*',
+        r'\s+lavender.*',
+        r'\s+citrus.*',
+        r'\s+unscented.*',
+        r'\s+\d+\s*(oz|ml|ct|count|pack).*',  # Sizes
+        r'\s+value.*',
+        r'\s+family.*',
+        r'\s+travel.*',
+    ]
+
+    for pattern in variant_patterns:
+        name_clean = re.sub(pattern, '', name_clean, flags=re.IGNORECASE)
+
+    # Remove special characters except spaces
+    name_clean = re.sub(r'[^\w\s]', '', name_clean)
+
+    # Collapse multiple spaces
+    name_clean = re.sub(r'\s+', ' ', name_clean).strip()
+    brand_clean = re.sub(r'[^\w\s]', '', brand_clean)
+    brand_clean = re.sub(r'\s+', ' ', brand_clean).strip()
+
+    return f"{brand_clean}:{name_clean}"
+
+
 async def get_product_analysis(product_name: str, brand: str, category: str, visible_ingredients: list) -> dict:
     """
     V4 NEW ARCHITECTURE: Check cache first, research if needed, cache the result.
@@ -2330,8 +2374,9 @@ async def get_product_analysis(product_name: str, brand: str, category: str, vis
     """
     global db_pool
 
-    # Create cache key from brand:product_name
-    cache_key = f"{brand}:{product_name}".lower().strip()
+    # Create normalized cache key for consistent matching
+    cache_key = normalize_cache_key(brand, product_name)
+    logger.info(f"[V4 CACHE KEY] Normalized: {cache_key} (from '{brand}':'{product_name}')")
 
     # Check Postgres cache (7-day TTL)
     if db_pool:
@@ -2425,7 +2470,7 @@ IMPORTANT: If you cannot read ingredients clearly, return empty array - that's c
 
         # Step 1: Vision extracts product identification (NOT ingredients)
         vision_message = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-5-20251101",
             max_tokens=500,
             messages=[{
                 "role": "user",
@@ -2475,7 +2520,7 @@ IMPORTANT: If you cannot read ingredients clearly, return empty array - that's c
         # Build final response
         response = {
             "success": True,
-            "version": "4.0.0",
+            "version": "4.2.0",
             **analysis,  # Include all research results
             "report_id": report_id,
             "timestamp": datetime.now().isoformat()
@@ -2586,7 +2631,7 @@ async def scan_product_v3(image: UploadFile = File(...)):
 
         # Step 2: Single Claude API call with modular prompt
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-5-20251101",
             max_tokens=4096,
             messages=[
                 {
