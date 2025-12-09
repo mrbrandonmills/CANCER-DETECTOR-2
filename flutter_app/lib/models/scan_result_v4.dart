@@ -165,16 +165,32 @@ class CorporateDisclosure {
   });
 
   factory CorporateDisclosure.fromJson(Map<String, dynamic> json) {
+    // Handle issues field (can be string or array from API)
+    List<String> issuesList = [];
+    if (json['issues'] != null) {
+      if (json['issues'] is String) {
+        issuesList = [json['issues'] as String];
+      } else if (json['issues'] is List) {
+        issuesList = List<String>.from(json['issues']);
+      }
+    }
+
+    // Handle notable_brands field (can be string or array from API)
+    List<String> brandsList = [];
+    if (json['notable_brands'] != null) {
+      if (json['notable_brands'] is String) {
+        brandsList = [json['notable_brands'] as String];
+      } else if (json['notable_brands'] is List) {
+        brandsList = List<String>.from(json['notable_brands']);
+      }
+    }
+
     return CorporateDisclosure(
       brand: json['brand'] as String? ?? '',
       parentCompany: json['parent_company'] as String? ?? '',
-      issues: json['issues'] != null
-          ? List<String>.from(json['issues'])
-          : [],
-      notableBrands: json['notable_brands'] != null
-          ? List<String>.from(json['notable_brands'])
-          : [],
-      penalty: json['penalty'] as int? ?? 0,
+      issues: issuesList,
+      notableBrands: brandsList,
+      penalty: json['penalty_applied'] as int? ?? json['penalty'] as int? ?? 0,
     );
   }
 
@@ -211,7 +227,7 @@ class IngredientGraded {
       name: json['name'] as String? ?? '',
       grade: json['grade'] as String? ?? 'F',
       color: json['color'] as String? ?? '#ef4444',
-      reason: json['reason'] as String? ?? '',
+      reason: json['description'] as String? ?? json['reason'] as String? ?? '',
       hazardScore: json['hazard_score'] as int? ?? 0,
       hiddenTruth: json['hidden_truth'] as String?,
     );

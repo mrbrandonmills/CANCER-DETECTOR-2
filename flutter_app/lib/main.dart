@@ -11,17 +11,29 @@ import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Initialize Hive for local storage
   await Hive.initFlutter();
   await Hive.openBox('scan_history');
   await Hive.openBox('user_data');
-  
+
+  // V4 MIGRATION: Clear old scan history with incompatible V3 scores
+  // This runs ONCE per installation to ensure users see accurate V4 grades
+  final userData = Hive.box('user_data');
+  final migratedToV4 = userData.get('migrated_to_v4', defaultValue: false);
+
+  if (!migratedToV4) {
+    final scanHistory = Hive.box('scan_history');
+    await scanHistory.clear(); // Remove all old V3 scans
+    await userData.put('migrated_to_v4', true);
+    debugPrint('✅ V4 Migration: Cleared old scan history (V3 scores incompatible with V4)');
+  }
+
   // Lock to portrait
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
   ]);
-  
+
   runApp(const CancerDetectorApp());
 }
 

@@ -126,8 +126,8 @@ class HistoryScreen extends StatelessWidget {
               ),
               _statItem(
                 context,
-                '${service.carcinogensFound}',
-                'Carcinogens\nFound',
+                '${service.totalScans}',
+                'Total\nScans',
               ),
             ],
           ),

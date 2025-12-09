@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/scan_result_v4.dart';
+import '../theme/app_colors.dart';
 
 class ResultScreenV4 extends StatelessWidget {
   final ScanResultV4 result;
@@ -67,21 +68,11 @@ class ResultScreenV4 extends StatelessWidget {
 
                 const SizedBox(height: 32),
 
-                // Processing Alerts (if any)
-                if (result.alerts.isNotEmpty) ...[
-                  _buildAlerts()
+                // Component 3: Ingredients List (Worst-First) - MOVED UP
+                if (result.ingredientsGraded.isNotEmpty) ...[
+                  _buildIngredientsList()
                       .animate()
-                      .fadeIn(delay: 300.ms, duration: 400.ms)
-                      .slideY(begin: 0.1, duration: 400.ms),
-                  const SizedBox(height: 24),
-                ],
-
-                // Component 3: Hidden Truths Expandable Cards
-                if (result.hiddenTruths.isNotEmpty) ...[
-                  _buildHiddenTruths()
-                      .animate()
-                      .fadeIn(delay: 350.ms, duration: 400.ms)
-                      .slideY(begin: 0.1, duration: 400.ms),
+                      .fadeIn(delay: 300.ms, duration: 400.ms),
                   const SizedBox(height: 24),
                 ],
 
@@ -89,24 +80,34 @@ class ResultScreenV4 extends StatelessWidget {
                 if (result.corporateDisclosure != null) ...[
                   _buildCorporateDisclosure()
                       .animate()
+                      .fadeIn(delay: 350.ms, duration: 400.ms)
+                      .slideY(begin: 0.1, duration: 400.ms),
+                  const SizedBox(height: 24),
+                ],
+
+                // Component 5: Hidden Truths Expandable Cards - MOVED DOWN
+                if (result.hiddenTruths.isNotEmpty) ...[
+                  _buildHiddenTruths()
+                      .animate()
                       .fadeIn(delay: 400.ms, duration: 400.ms)
                       .slideY(begin: 0.1, duration: 400.ms),
                   const SizedBox(height: 24),
                 ],
 
-                // Component 6: Ingredients List (Worst-First)
-                if (result.ingredientsGraded.isNotEmpty) ...[
-                  _buildIngredientsList()
+                // Processing Alerts (if any)
+                if (result.alerts.isNotEmpty) ...[
+                  _buildAlerts()
                       .animate()
-                      .fadeIn(delay: 500.ms, duration: 400.ms),
+                      .fadeIn(delay: 450.ms, duration: 400.ms)
+                      .slideY(begin: 0.1, duration: 400.ms),
                   const SizedBox(height: 32),
                 ],
 
-                // Component 5: Deep Research Button
+                // Component 6: Deep Research Button
                 _buildDeepResearchButton(context)
                     .animate()
-                    .fadeIn(delay: 600.ms, duration: 400.ms)
-                    .scale(delay: 700.ms, duration: 300.ms, begin: const Offset(0.95, 0.95)),
+                    .fadeIn(delay: 500.ms, duration: 400.ms)
+                    .scale(delay: 600.ms, duration: 300.ms, begin: const Offset(0.95, 0.95)),
 
                 const SizedBox(height: 20),
               ]),
@@ -696,6 +697,9 @@ class ResultScreenV4 extends StatelessWidget {
   }
 
   Widget _buildIngredientItem(IngredientGraded ingredient, int index) {
+    // Use centralized color system from AppColors
+    final gradeColor = AppColors.getGradeColor(ingredient.grade);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
@@ -703,7 +707,7 @@ class ResultScreenV4 extends StatelessWidget {
         color: const Color(0xFF1a1a1a),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: ingredient.gradeColor.withOpacity(0.4),
+          color: gradeColor.withOpacity(0.4),
           width: 2,
         ),
       ),
@@ -713,11 +717,11 @@ class ResultScreenV4 extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
             decoration: BoxDecoration(
-              color: ingredient.gradeColor,
+              color: gradeColor,
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: ingredient.gradeColor.withOpacity(0.3),
+                  color: gradeColor.withOpacity(0.3),
                   blurRadius: 8,
                   spreadRadius: 1,
                 ),

@@ -17,6 +17,7 @@ import base64
 import re
 import uuid
 import asyncio
+import logging
 from datetime import datetime
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,7 +25,11 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from enum import Enum
 import anthropic
-import redis
+import asyncpg
+
+# Configure logger
+logging.basicConfig(level=logging.INFO, format='%(levelname)s:     %(message)s')
+logger = logging.getLogger(__name__)
 
 # V3 Modular Prompts
 from prompts import build_prompt
@@ -41,25 +46,60 @@ if not ANTHROPIC_API_KEY:
 client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY) if ANTHROPIC_API_KEY else None
 
 # ============================================
-# REDIS SETUP (DISABLED - Not needed for V4)
+# POSTGRES DATABASE SETUP (V4 Caching)
 # ============================================
 
-# Redis is only used for Deep Research job queue (premium feature)
-# Not required for basic V4 scanning functionality
-redis_client = None
+db_pool = None
 
-# Only try to connect if REDIS_URL is explicitly set
-redis_url = os.getenv("REDIS_URL")
-if redis_url:
+async def init_db():
+    """Initialize Postgres connection pool on startup"""
+    global db_pool
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        logger.warning("⚠️ DATABASE_URL not set - caching disabled")
+        return
+
     try:
-        redis_client = redis.from_url(redis_url, decode_responses=True)
-        redis_client.ping()
-        print(f"✅ Redis connected: {redis_url}")
+        db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=10)
+        logger.info("✅ Postgres connected for V4 caching")
+
+        # NUCLEAR FIX: Drop and recreate table to ensure correct schema
+        # This is safe because cached_products only stores cache data (Claude regenerates on miss)
+        async with db_pool.acquire() as conn:
+            # Drop existing table with wrong schema
+            await conn.execute("DROP TABLE IF EXISTS cached_products CASCADE")
+            logger.info("🗑️ Dropped old cached_products table (if existed)")
+
+            # Create fresh table with correct schema
+            await conn.execute("""
+                CREATE TABLE cached_products (
+                    id SERIAL PRIMARY KEY,
+                    cache_key VARCHAR(255) UNIQUE NOT NULL,
+                    product_name VARCHAR(255),
+                    brand VARCHAR(255),
+                    data JSONB NOT NULL,
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+
+            # Create indexes for performance
+            await conn.execute("""
+                CREATE INDEX idx_cached_products_key ON cached_products(cache_key)
+            """)
+            await conn.execute("""
+                CREATE INDEX idx_cached_products_updated ON cached_products(updated_at)
+            """)
+        logger.info("✅ Cached_products table created with correct schema")
     except Exception as e:
-        print(f"⚠️ Redis connection failed: {e}")
-        print("Deep Research jobs will use in-memory storage")
-else:
-    print("ℹ️ Redis not configured (not required for V4 scanning)")
+        logger.error(f"❌ Postgres connection failed: {e}")
+        db_pool = None
+
+async def close_db():
+    """Close Postgres connection pool on shutdown"""
+    global db_pool
+    if db_pool:
+        await db_pool.close()
+        logger.info("Postgres connection closed")
 
 # ============================================
 # TOXICITY DATABASE (103 ingredients)
@@ -834,6 +874,20 @@ app.add_middleware(
 )
 
 # ============================================
+# STARTUP/SHUTDOWN EVENTS
+# ============================================
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database connection on startup"""
+    await init_db()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close database connection on shutdown"""
+    await close_db()
+
+# ============================================
 # MODELS
 # ============================================
 
@@ -1050,7 +1104,7 @@ IMPORTANT:
 
     try:
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-5-20251101",
             max_tokens=2048,
             messages=[
                 {
@@ -1708,66 +1762,45 @@ This is the "healthy brand + junk food" business model.
 
 
 # ============================================
-# V4 PHASE 3: REDIS HELPER FUNCTIONS
+# V4 PHASE 3: JOB HELPER FUNCTIONS (In-Memory)
 # ============================================
 
-def save_job_to_redis(job_id: str, job_data: dict):
-    """Save job to Redis with 24-hour expiration"""
-    if redis_client:
-        try:
-            redis_client.setex(
-                f"job:{job_id}",
-                86400,  # 24 hours in seconds
-                json.dumps(job_data)
-            )
-        except Exception as e:
-            print(f"Redis save error for {job_id}: {e}")
-            # Fallback to in-memory
-            DEEP_RESEARCH_JOBS[job_id] = DeepResearchJob(**job_data)
-    else:
-        DEEP_RESEARCH_JOBS[job_id] = DeepResearchJob(**job_data)
+def save_job(job_id: str, job_data: dict):
+    """Save job to in-memory store"""
+    DEEP_RESEARCH_JOBS[job_id] = DeepResearchJob(**job_data)
 
-def get_job_from_redis(job_id: str) -> dict | None:
-    """Retrieve job from Redis or in-memory fallback"""
-    if redis_client:
-        try:
-            job_json = redis_client.get(f"job:{job_id}")
-            if job_json:
-                return json.loads(job_json)
-        except Exception as e:
-            print(f"Redis get error for {job_id}: {e}")
-
-    # Fallback to in-memory
+def get_job(job_id: str) -> dict | None:
+    """Retrieve job from in-memory store"""
     job = DEEP_RESEARCH_JOBS.get(job_id)
     return job.dict() if job else None
 
 def update_job_progress(job_id: str, progress: int, current_step: str):
-    """Update job progress in Redis"""
-    job_data = get_job_from_redis(job_id)
+    """Update job progress"""
+    job_data = get_job(job_id)
     if job_data:
         job_data["progress"] = progress
         job_data["current_step"] = current_step
-        save_job_to_redis(job_id, job_data)
+        save_job(job_id, job_data)
 
 def complete_job(job_id: str, result: dict):
     """Mark job as completed with full report"""
-    job_data = get_job_from_redis(job_id)
+    job_data = get_job(job_id)
     if job_data:
         job_data["status"] = JobStatus.COMPLETED.value
         job_data["progress"] = 100
         job_data["current_step"] = "Complete"
         job_data["result"] = result
         job_data["completed_at"] = datetime.utcnow().isoformat()
-        save_job_to_redis(job_id, job_data)
+        save_job(job_id, job_data)
 
 def fail_job(job_id: str, error: str):
     """Mark job as failed with error message"""
-    job_data = get_job_from_redis(job_id)
+    job_data = get_job(job_id)
     if job_data:
         job_data["status"] = JobStatus.FAILED.value
         job_data["error"] = error
         job_data["completed_at"] = datetime.utcnow().isoformat()
-        save_job_to_redis(job_id, job_data)
+        save_job(job_id, job_data)
 
 # ============================================
 # V4 PHASE 3: DEEP RESEARCH BACKGROUND TASK
@@ -1810,7 +1843,7 @@ async def process_deep_research(job_id: str, request_data: DeepResearchRequest):
 
         # Call Claude for deep research
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-5-20251101",
             max_tokens=8000,  # Comprehensive report needs more tokens
             temperature=0.3,  # Lower temp for factual research
             messages=[{
@@ -1874,7 +1907,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "3.1.0",
+        "version": "4.2.0",
         "claude_api": "connected" if client else "not configured"
     }
 
@@ -1884,11 +1917,8 @@ async def health():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "4.0.0-V4-LOGGING-ENABLED",
+        "version": "4.2.0",
         "v3_ready": True,
-        "v4_ready": True,
-        "v4_logging": True,
-        "git_commit": "a3be969",
         "claude_api": "connected" if client else "not configured",
         "modular_prompts": True,
         "categories": ["food", "water", "cosmetics", "cookware", "cleaning", "supplements"]
@@ -2107,6 +2137,287 @@ async def scan_product_base64(data: dict):
 
 
 # ============================================
+# V4 RESEARCH FUNCTIONS (NEW ARCHITECTURE)
+# ============================================
+
+async def research_product(product_name: str, brand: str, category: str, visible_ingredients: list) -> dict:
+    """
+    V4 NEW ARCHITECTURE: Claude researches the product using its knowledge base.
+    This is the BRAIN of V4 - Claude synthesizes real safety data.
+
+    Args:
+        product_name: Product name from vision
+        brand: Brand name from vision
+        category: Product category
+        visible_ingredients: Any ingredients read from label (may be empty)
+
+    Returns:
+        Complete V4 analysis with grades, scores, hidden truths, corporate info
+    """
+
+    research_prompt = f"""You are TrueCancer's product safety researcher. Research this product thoroughly using your knowledge base.
+
+PRODUCT: {product_name}
+BRAND: {brand}
+CATEGORY: {category}
+VISIBLE INGREDIENTS (from label): {visible_ingredients if visible_ingredients else "None readable - you must research typical formulation"}
+
+YOUR TASK:
+1. **IDENTIFY ACTUAL INGREDIENTS** (from your knowledge, SDS data, typical formulations for this product):
+   - If this is Clorox Disinfecting Wipes, you know it contains: quaternary ammonium compounds, fragrances, isopropanol, surfactants
+   - If this is Cheez-Its, you know it contains: enriched flour, vegetable oil, cheese, salt, TBHQ, Yellow 5, Yellow 6
+   - Research what's REALLY in this product, even if not shown on label
+
+2. **GRADE EACH INGREDIENT** using this exact system:
+   - **F (Red)**: IARC Group 1 carcinogens, banned in EU, known endocrine disruptors (formaldehyde, BHA, parabens)
+   - **D (Orange)**: IARC 2B possible carcinogens, requires EU warnings, GRAS-exploited (TBHQ, artificial colors, sodium nitrite)
+   - **C (Yellow)**: Processed ingredients, GMO-derived, environmental concerns (HFCS, palm oil, "natural flavors")
+   - **B (Green)**: Minimally processed, minor concerns (canola oil, sugar, cornstarch)
+   - **A (Green)**: Whole foods, certified organic, no concerns (water, organic wheat, sea salt)
+
+3. **RESEARCH PARENT COMPANY**:
+   - Who owns this brand? (e.g., Kellogg's owns Cheez-Its, Clorox Company owns Clorox)
+   - Any EPA fines, lawsuits, settlements, controversies?
+   - Part of Big 10 conglomerates? (Nestlé, PepsiCo, Kraft Heinz, General Mills, Kellogg's, Mars, Mondelez, Coca-Cola, ConAgra, Unilever)
+
+4. **GENERATE HIDDEN TRUTHS** - what consumers should know that's NOT on the label:
+   - Specific dollar amounts of fines/settlements
+   - Which countries have banned ingredients
+   - GRAS loopholes exploited
+   - Corporate ownership connections
+   - Environmental impacts
+
+5. **CALCULATE DIMENSION SCORES** (0-100):
+   - **ingredient_safety**: Average of all ingredient scores (F=0, D=35, C=55, B=80, A=95)
+   - **processing_level**: 90 if whole foods, 60 if processed, 30 if ultra-processed
+   - **corporate_ethics**: 70 baseline, subtract 10-30 for each major controversy/fine
+   - **supply_chain**: 50 default, +10 for organic/fair trade, -10 for monoculture crops
+
+6. **CALCULATE OVERALL SCORE**:
+   - Formula: (ingredient_safety × 0.40) + (processing_level × 0.25) + (corporate_ethics × 0.20) + (supply_chain × 0.15)
+   - CRITICAL: If ANY F-grade ingredient exists, cap overall_score at 49 max
+   - If ANY D-grade ingredient exists and no F, cap at 69 max
+
+7. **DETERMINE OVERALL GRADE**:
+   - A+ (95-100), A (85-94), B (70-84), C (50-69), D (30-49), F (0-29)
+
+RETURN THIS EXACT JSON (no markdown, no extra text):
+{{
+  "product_name": "{product_name}",
+  "brand": "{brand}",
+  "category": "{category}",
+  "overall_score": <number 0-100>,
+  "overall_grade": "<letter grade>",
+  "dimension_scores": {{
+    "ingredient_safety": <0-100>,
+    "processing_level": <0-100>,
+    "corporate_ethics": <0-100>,
+    "supply_chain": <0-100>
+  }},
+  "ingredients_graded": [
+    {{
+      "name": "<ingredient name>",
+      "grade": "<F/D/C/B/A>",
+      "hazard_score": <0-100 where F=0-29, D=30-49, C=50-69, B=70-84, A=85-100>,
+      "description": "<why this grade - max 150 chars>",
+      "tier": <1 for F, 2 for D, 3 for C, 4 for B/A>
+    }}
+  ],
+  "alerts": [
+    "🔴 AVOID: <F-grade ingredient>",
+    "🟠 LIMIT: <D-grade ingredient>",
+    "🏭 ULTRA-PROCESSED: <count> processing markers",
+    "📍 OWNED BY: <parent company>"
+  ],
+  "hidden_truths": [
+    "💊 HIDDEN TRUTH: <specific fact with numbers/dates/countries>",
+    "📍 CORPORATE OWNERSHIP: <parent company details>",
+    "⚖️ LEGAL ISSUES: <specific fines/lawsuits with dollar amounts>"
+  ],
+  "corporate_disclosure": {{
+    "parent_company": "<name or null>",
+    "penalty_applied": <number like -10, -20, -30>,
+    "issues": "<specific controversies, lawsuits, EPA fines with dates and amounts>"
+  }}
+}}
+
+CRITICAL RULES:
+- Sort ingredients_graded by hazard_score DESCENDING (worst first)
+- Be specific in hidden_truths (include dates, dollar amounts, country names)
+- If you don't know an ingredient's safety, grade it C with "Insufficient safety data"
+- ALWAYS return valid JSON with all required fields
+- Do NOT invent ingredients - only include what you know is actually in this product
+- For cleaning products, include both active AND inactive ingredients you know about
+"""
+
+    try:
+        # Call Claude API for research
+        response = client.messages.create(
+            model="claude-opus-4-5-20251101",
+            max_tokens=3000,
+            messages=[{
+                "role": "user",
+                "content": research_prompt
+            }]
+        )
+
+        # Extract JSON from response
+        response_text = response.content[0].text
+
+        # Remove markdown if present
+        if "```json" in response_text:
+            json_start = response_text.find("```json") + 7
+            json_end = response_text.find("```", json_start)
+            response_text = response_text[json_start:json_end].strip()
+        elif "```" in response_text:
+            json_start = response_text.find("```") + 3
+            json_end = response_text.find("```", json_start)
+            response_text = response_text[json_start:json_end].strip()
+
+        # Find JSON object
+        json_start = response_text.find('{')
+        json_end = response_text.rfind('}') + 1
+        if json_start != -1 and json_end > json_start:
+            json_str = response_text[json_start:json_end]
+            result = json.loads(json_str)
+
+            # Normalize arrays (fix Claude returning strings instead of arrays)
+            if isinstance(result.get('alerts'), str):
+                result['alerts'] = [result['alerts']] if result['alerts'] else []
+            if isinstance(result.get('hidden_truths'), str):
+                result['hidden_truths'] = [result['hidden_truths']] if result['hidden_truths'] else []
+            if isinstance(result.get('ingredients_graded'), str):
+                result['ingredients_graded'] = []
+
+            # Ensure arrays exist (defensive)
+            if 'alerts' not in result or result['alerts'] is None:
+                result['alerts'] = []
+            if 'hidden_truths' not in result or result['hidden_truths'] is None:
+                result['hidden_truths'] = []
+            if 'ingredients_graded' not in result or result['ingredients_graded'] is None:
+                result['ingredients_graded'] = []
+
+            logger.info(f"[V4 RESEARCH] Successfully researched {product_name}: {len(result.get('ingredients_graded', []))} ingredients, score={result.get('overall_score')}")
+            return result
+        else:
+            raise ValueError("No JSON found in research response")
+
+    except Exception as e:
+        logger.error(f"[V4 RESEARCH ERROR] {str(e)}")
+        # Return fallback response
+        return {
+            "product_name": product_name,
+            "brand": brand,
+            "category": category,
+            "overall_score": 50,
+            "overall_grade": "C",
+            "dimension_scores": {
+                "ingredient_safety": 50,
+                "processing_level": 50,
+                "corporate_ethics": 50,
+                "supply_chain": 50
+            },
+            "ingredients_graded": [],
+            "alerts": ["⚠️ Research temporarily unavailable"],
+            "hidden_truths": [],
+            "corporate_disclosure": None
+        }
+
+
+def normalize_cache_key(brand: str, product_name: str) -> str:
+    """
+    Normalize product name for consistent cache keys.
+    Removes variants, scents, sizes to match same base product.
+    """
+    import re
+
+    # Lowercase and strip
+    brand_clean = brand.lower().strip()
+    name_clean = product_name.lower().strip()
+
+    # Remove common variant descriptors (scents, sizes, etc.)
+    variant_patterns = [
+        r'\s*-\s*.*$',  # Everything after dash
+        r'\s+lemon.*',
+        r'\s+fresh.*',
+        r'\s+original.*',
+        r'\s+crisp.*',
+        r'\s+clean.*',
+        r'\s+lavender.*',
+        r'\s+citrus.*',
+        r'\s+unscented.*',
+        r'\s+\d+\s*(oz|ml|ct|count|pack).*',  # Sizes
+        r'\s+value.*',
+        r'\s+family.*',
+        r'\s+travel.*',
+    ]
+
+    for pattern in variant_patterns:
+        name_clean = re.sub(pattern, '', name_clean, flags=re.IGNORECASE)
+
+    # Remove special characters except spaces
+    name_clean = re.sub(r'[^\w\s]', '', name_clean)
+
+    # Collapse multiple spaces
+    name_clean = re.sub(r'\s+', ' ', name_clean).strip()
+    brand_clean = re.sub(r'[^\w\s]', '', brand_clean)
+    brand_clean = re.sub(r'\s+', ' ', brand_clean).strip()
+
+    return f"{brand_clean}:{name_clean}"
+
+
+async def get_product_analysis(product_name: str, brand: str, category: str, visible_ingredients: list) -> dict:
+    """
+    V4 NEW ARCHITECTURE: Check cache first, research if needed, cache the result.
+
+    Uses Postgres cached_products table for 7-day caching.
+    """
+    global db_pool
+
+    # Create normalized cache key for consistent matching
+    cache_key = normalize_cache_key(brand, product_name)
+    logger.info(f"[V4 CACHE KEY] Normalized: {cache_key} (from '{brand}':'{product_name}')")
+
+    # Check Postgres cache (7-day TTL)
+    if db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                cached = await conn.fetchrow("""
+                    SELECT data, updated_at
+                    FROM cached_products
+                    WHERE cache_key = $1 AND updated_at > NOW() - INTERVAL '7 days'
+                """, cache_key)
+
+                if cached:
+                    logger.info(f"[V4 CACHE HIT] {cache_key}")
+                    return json.loads(cached["data"])
+        except Exception as e:
+            logger.warning(f"[V4 CACHE CHECK ERROR] {str(e)}")
+
+    # Cache miss - research the product
+    logger.info(f"[V4 CACHE MISS] {cache_key} - researching with Claude...")
+
+    result = await research_product(product_name, brand, category, visible_ingredients)
+
+    # Save to cache
+    if db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                await conn.execute("""
+                    INSERT INTO cached_products (cache_key, product_name, brand, data, updated_at)
+                    VALUES ($1, $2, $3, $4, NOW())
+                    ON CONFLICT (cache_key) DO UPDATE SET
+                        data = $4,
+                        updated_at = NOW()
+                """, cache_key, product_name, brand, json.dumps(result))
+            logger.info(f"[V4 CACHE SAVED] {cache_key}")
+        except Exception as e:
+            logger.warning(f"[V4 CACHE SAVE ERROR] {str(e)}")
+
+    return result
+
+
+# ============================================
 # V4 SCAN ENDPOINT
 # ============================================
 
@@ -2123,6 +2434,8 @@ async def scan_product_v4(image: UploadFile = File(...)):
 
     Returns hidden truths, corporate ownership, and tiered ingredient grading.
     """
+    # FIRST LINE - PROVE FUNCTION IS CALLED
+    logger.info(f"[V4 SCAN START] Received image: {image.filename}, type: {image.content_type}")
 
     # Validate content type
     allowed_types = ["image/jpeg", "image/png", "image/webp", "image/gif"]
@@ -2137,130 +2450,83 @@ async def scan_product_v4(image: UploadFile = File(...)):
         image_data = await image.read()
         image_base64 = base64.b64encode(image_data).decode('utf-8')
 
-        # Enhanced V4 prompt for Claude Vision
-        v4_prompt = """Analyze this product image and extract the following information:
+        # V4 NEW ARCHITECTURE: Vision only identifies product, doesn't need ingredients
+        vision_prompt = """Look at this product image and extract basic identification:
 
-1. Product name
-2. Brand name
-3. Complete ingredients list (if visible)
-4. Product category (food, water, cosmetics, cookware, cleaning, supplements, other)
+1. product_name: The exact product name from the package
+2. brand: The brand/manufacturer name
+3. category: One of [food, beverage, cleaning, cosmetics, household, supplement, cookware, other]
+4. visible_ingredients: Any ingredients you can clearly read (may be empty - that's OK)
 
-Focus on reading all ingredient text clearly. Look for:
-- Main ingredient panel
-- "Contains:" statements
-- Allergen warnings
-- Material composition (for non-food items)
-
-Return ONLY a JSON object with this exact structure:
+Return ONLY valid JSON (no markdown, no extra text):
 {
-    "product_name": "Exact product name",
-    "brand": "Brand name",
-    "category": "food/water/cosmetics/cookware/cleaning/supplements/other",
-    "ingredients": ["ingredient1", "ingredient2", ...],
-    "confidence": "high/medium/low"
-}"""
+  "product_name": "...",
+  "brand": "...",
+  "category": "...",
+  "visible_ingredients": []
+}
 
-        # Call Claude Vision API
-        message = client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=2048,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "image",
-                            "source": {
-                                "type": "base64",
-                                "media_type": image.content_type,
-                                "data": image_base64,
-                            },
-                        },
-                        {
-                            "type": "text",
-                            "text": v4_prompt
+IMPORTANT: If you cannot read ingredients clearly, return empty array - that's completely fine. Your main job is to identify the product."""
+
+        # Step 1: Vision extracts product identification (NOT ingredients)
+        vision_message = client.messages.create(
+            model="claude-opus-4-5-20251101",
+            max_tokens=500,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {
+                        "type": "image",
+                        "source": {
+                            "type": "base64",
+                            "media_type": image.content_type,
+                            "data": image_base64
                         }
-                    ],
-                }
-            ],
+                    },
+                    {
+                        "type": "text",
+                        "text": vision_prompt
+                    }
+                ]
+            }]
         )
 
-        # Parse Claude's response
-        response_text = message.content[0].text
+        # Parse vision response
+        vision_text = vision_message.content[0].text
+        logger.info(f"[V4 VISION RESPONSE] {vision_text[:500]}")
 
-        # Extract JSON from response
-        try:
-            # Try to find JSON in the response
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
-            if json_start != -1 and json_end > json_start:
-                json_str = response_text[json_start:json_end]
-                analysis = json.loads(json_str)
-            else:
-                raise ValueError("No JSON found in response")
-        except (json.JSONDecodeError, ValueError) as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Failed to parse AI response: {str(e)}"
-            )
+        # Extract JSON
+        json_start = vision_text.find('{')
+        json_end = vision_text.rfind('}') + 1
+        if json_start != -1 and json_end > json_start:
+            vision_json = vision_text[json_start:json_end]
+            vision_data = json.loads(vision_json)
+        else:
+            raise HTTPException(status_code=500, detail="Failed to parse vision response")
 
-        # Prepare product data for V4 scoring
-        product_data = {
-            "product_name": analysis.get("product_name", "Unknown Product"),
-            "brand": analysis.get("brand", "Unknown Brand"),
-            "category": analysis.get("category", "other"),
-            "ingredients": analysis.get("ingredients", []),
-            "confidence": analysis.get("confidence", "medium")
-        }
+        logger.info(f"[V4 VISION] Product: {vision_data.get('product_name')}, Brand: {vision_data.get('brand')}, Category: {vision_data.get('category')}")
 
-        # LOG: What ingredients were extracted
-        logger.info(f"[V4 SCAN] Product: {product_data['product_name']}")
-        logger.info(f"[V4 SCAN] Brand: {product_data['brand']}")
-        logger.info(f"[V4 SCAN] Ingredients extracted: {len(product_data['ingredients'])}")
-        logger.info(f"[V4 SCAN] Ingredient list: {product_data['ingredients']}")
-
-        # Calculate V4 score
-        v4_results = calculate_v4_score(product_data)
-
-        # LOG: What was calculated
-        logger.info(f"[V4 SCAN] Overall score: {v4_results['overall_score']}, Grade: {v4_results['overall_grade']}")
-        logger.info(f"[V4 SCAN] Alerts count: {len(v4_results['alerts'])}")
-        logger.info(f"[V4 SCAN] Hidden truths count: {len(v4_results['hidden_truths'])}")
-        logger.info(f"[V4 SCAN] Ingredients graded count: {len(v4_results['ingredients_graded'])}")
-        logger.info(f"[V4 SCAN] Alerts: {v4_results['alerts']}")
-        logger.info(f"[V4 SCAN] Ingredients graded: {[{'name': i['name'], 'grade': i['grade']} for i in v4_results['ingredients_graded']]}")
+        # Step 2: Get full analysis (cache or research)
+        analysis = await get_product_analysis(
+            product_name=vision_data.get("product_name", "Unknown Product"),
+            brand=vision_data.get("brand", "Unknown Brand"),
+            category=vision_data.get("category", "other"),
+            visible_ingredients=vision_data.get("visible_ingredients", [])
+        )
 
         # Generate unique report ID
         report_id = f"V4-{datetime.now().strftime('%Y%m%d%H%M%S')}-{os.urandom(4).hex().upper()}"
 
-        # Build response
+        # Build final response
         response = {
             "success": True,
-            "version": "4.0.0",
-            "product_name": product_data["product_name"],
-            "brand": product_data["brand"],
-            "category": product_data["category"],
-            "ingredients": product_data["ingredients"],
-            "confidence": product_data["confidence"],
-
-            # V4 Scoring
-            "overall_score": v4_results["overall_score"],
-            "overall_grade": v4_results["overall_grade"],
-            "dimension_scores": v4_results["dimension_scores"],
-
-            # Tiered Ingredients (sorted worst-first)
-            "ingredients_graded": v4_results["ingredients_graded"],
-
-            # Consumer Protection
-            "alerts": v4_results["alerts"],
-            "hidden_truths": v4_results["hidden_truths"],
-            "parent_company": v4_results.get("parent_company"),
-            "corporate_disclosure": v4_results.get("corporate_disclosure"),
-
-            # Metadata
+            "version": "4.2.0",
+            **analysis,  # Include all research results
             "report_id": report_id,
             "timestamp": datetime.now().isoformat()
         }
+
+        logger.info(f"[V4 COMPLETE] {analysis['product_name']}: Score={analysis['overall_score']}, Grade={analysis['overall_grade']}, Ingredients={len(analysis.get('ingredients_graded', []))}")
 
         return response
 
@@ -2365,7 +2631,7 @@ async def scan_product_v3(image: UploadFile = File(...)):
 
         # Step 2: Single Claude API call with modular prompt
         response = client.messages.create(
-            model="claude-sonnet-4-20250514",
+            model="claude-opus-4-5-20251101",
             max_tokens=4096,
             messages=[
                 {
@@ -2484,8 +2750,8 @@ async def start_deep_research(
         "completed_at": None
     }
 
-    # Save to Redis (with fallback to in-memory)
-    save_job_to_redis(job_id, job_data)
+    # Save to in-memory store
+    save_job(job_id, job_data)
 
     # Start background task
     background_tasks.add_task(process_deep_research, job_id, request)
@@ -2511,7 +2777,7 @@ async def get_job_status(job_id: str):
     - Error message (if failed)
     """
 
-    job_data = get_job_from_redis(job_id)
+    job_data = get_job(job_id)
 
     if not job_data:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -2522,21 +2788,14 @@ async def get_job_status(job_id: str):
 @app.delete("/api/v4/admin/cleanup-jobs")
 async def cleanup_old_jobs():
     """
-    Remove jobs older than 24 hours (Redis handles this automatically via TTL).
+    Manual cleanup endpoint for in-memory jobs.
 
-    This endpoint is provided for administrative purposes, but Redis
-    automatically expires jobs after 24 hours using the setex command.
+    Jobs are stored in memory and cleared on server restart.
     """
-    if not redis_client:
-        return {
-            "message": "Redis not available, using in-memory storage",
-            "note": "In-memory jobs are cleared on server restart"
-        }
-
+    DEEP_RESEARCH_JOBS.clear()
     return {
-        "message": "Job cleanup is automatic (24-hour TTL)",
-        "redis_connected": True,
-        "cleanup_method": "Redis setex auto-expiration"
+        "message": "In-memory job store cleared",
+        "storage": "in-memory"
     }
 
 
