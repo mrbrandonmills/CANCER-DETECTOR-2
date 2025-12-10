@@ -5,6 +5,7 @@ import 'package:mime/mime.dart';
 import 'package:http_parser/http_parser.dart';
 import '../models/scan_result.dart';
 import '../models/scan_result_v4.dart';
+import '../models/deep_research_models.dart';
 
 class ApiService {
   // Production Railway deployment - Backend v3.1.0
@@ -233,6 +234,65 @@ class ApiService {
       throw Exception('No internet connection. Please check your network.');
     } on http.ClientException {
       throw Exception('Connection failed. Please try again.');
+    } catch (e) {
+      throw Exception('Error: $e');
+    }
+  }
+
+  /// Start a deep research job for comprehensive product investigation
+  Future<String> startDeepResearch({
+    required String productName,
+    String? brand,
+    required String category,
+    required List<String> ingredients,
+  }) async {
+    try {
+      final request = {
+        'product_name': productName,
+        'brand': brand,
+        'category': category,
+        'ingredients': ingredients,
+      };
+
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/v4/deep-research'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(request),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['job_id'] as String;
+      } else if (response.statusCode == 400) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['detail'] ?? 'Invalid request');
+      } else {
+        throw Exception('Failed to start deep research: ${response.statusCode}');
+      }
+    } on SocketException {
+      throw Exception('No internet connection');
+    } catch (e) {
+      throw Exception('Error: $e');
+    }
+  }
+
+  /// Get the status of a deep research job
+  Future<DeepResearchJob> getJobStatus(String jobId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/v4/job/$jobId'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return DeepResearchJob.fromJson(data);
+      } else if (response.statusCode == 404) {
+        throw Exception('Job not found');
+      } else {
+        throw Exception('Failed to get job status: ${response.statusCode}');
+      }
+    } on SocketException {
+      throw Exception('No internet connection');
     } catch (e) {
       throw Exception('Error: $e');
     }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/scan_result_v4.dart';
 import '../theme/app_colors.dart';
+import 'deep_research_dialog.dart';
 
 class ResultScreenV4 extends StatelessWidget {
   final ScanResultV4 result;
@@ -844,21 +845,35 @@ class ResultScreenV4 extends StatelessWidget {
     );
   }
 
-  void _startDeepResearch(BuildContext context) {
-    // TODO: Implement deep research functionality
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: const Text(
-          'Deep Research feature coming soon!',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-        backgroundColor: const Color(0xFF3b82f6),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-        margin: const EdgeInsets.all(20),
-      ),
+  void _startDeepResearch(BuildContext context) async {
+    // Extract ingredients from the result
+    final List<String> ingredients = result.ingredientsGraded
+        .map((ingredient) => ingredient.name)
+        .toList();
+
+    // Determine category from product data
+    String category = 'food'; // Default category
+    final productNameLower = result.productName?.toLowerCase() ?? '';
+
+    if (productNameLower.contains('drink') || productNameLower.contains('beverage') || productNameLower.contains('water')) {
+      category = 'water';
+    } else if (productNameLower.contains('cosmetic') || productNameLower.contains('lotion') || productNameLower.contains('cream')) {
+      category = 'cosmetics';
+    } else if (productNameLower.contains('clean') || productNameLower.contains('detergent') || productNameLower.contains('soap')) {
+      category = 'cleaning';
+    } else if (productNameLower.contains('supplement') || productNameLower.contains('vitamin')) {
+      category = 'supplements';
+    } else if (productNameLower.contains('cook') || productNameLower.contains('pan') || productNameLower.contains('pot')) {
+      category = 'cookware';
+    }
+
+    // Show the deep research dialog
+    await DeepResearchDialog.show(
+      context: context,
+      productName: result.productName ?? 'Unknown Product',
+      brand: result.brand,
+      category: category,
+      ingredients: ingredients,
     );
   }
 }
