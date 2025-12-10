@@ -1,11 +1,10 @@
 import 'dart:io';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../services/api_service.dart';
 import '../services/scan_history_service.dart';
-import '../models/scan_result.dart';
-import '../models/scan_result_v4.dart';
 import 'result_screen.dart';
 import 'result_screen_v4.dart';
 
@@ -16,10 +15,11 @@ class ScanScreen extends StatefulWidget {
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
+class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateMixin {
   final ImagePicker _picker = ImagePicker();
   bool _isProcessing = false;
   String? _statusMessage;
+  late AnimationController _dotAnimationController;
 
   // Toggle between V3 and V4 API (set to true to use V4)
   bool _useV4Api = true;
@@ -27,8 +27,19 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   void initState() {
     super.initState();
+    // Initialize loading dots animation
+    _dotAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
     // Auto-open camera when screen loads
     WidgetsBinding.instance.addPostFrameCallback((_) => _takePhoto());
+  }
+
+  @override
+  void dispose() {
+    _dotAnimationController.dispose();
+    super.dispose();
   }
 
   Future<void> _takePhoto() async {
@@ -72,7 +83,7 @@ class _ScanScreenState extends State<ScanScreen> {
   Future<void> _processPhoto(File imageFile) async {
     setState(() {
       _isProcessing = true;
-      _statusMessage = 'Analyzing product...';
+      _statusMessage = 'Claude AI is analyzing your product...';
     });
 
     try {
@@ -297,9 +308,9 @@ class _ScanScreenState extends State<ScanScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _buildLoadingDot(0),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 _buildLoadingDot(1),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
                 _buildLoadingDot(2),
               ],
             ),
@@ -310,25 +321,35 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Widget _buildLoadingDot(int index) {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 600),
-      builder: (context, value, child) {
+    return AnimatedBuilder(
+      animation: _dotAnimationController,
+      builder: (context, child) {
+        // Each dot has a delay offset (0ms, 200ms, 400ms)
         final delay = index * 0.2;
-        final animValue = ((value + delay) % 1.0);
-        final opacity = (animValue < 0.5) ? animValue * 2 : (1.0 - animValue) * 2;
+        final animValue = (_dotAnimationController.value + delay) % 1.0;
 
-        return Container(
-          width: 8,
-          height: 8,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            color: const Color(0xFF06b6d4).withOpacity(opacity),
+        // Smooth fade in/out using sine wave
+        final scale = 0.5 + (0.5 * (1 + (animValue * 2 * 3.14159).sin()) / 2);
+        final opacity = 0.3 + (0.7 * scale);
+
+        return Transform.scale(
+          scale: scale,
+          child: Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFF8b5cf6).withOpacity(opacity),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF8b5cf6).withOpacity(opacity * 0.5),
+                  blurRadius: 8,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
           ),
         );
-      },
-      onEnd: () {
-        if (mounted) setState(() {});
       },
     );
   }
