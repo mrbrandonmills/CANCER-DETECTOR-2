@@ -2160,13 +2160,23 @@ async def research_product(product_name: str, brand: str, category: str, visible
 PRODUCT: {product_name}
 BRAND: {brand}
 CATEGORY: {category}
-VISIBLE INGREDIENTS (from label): {visible_ingredients if visible_ingredients else "None readable - you must research typical formulation"}
+VISIBLE INGREDIENTS (from label): {visible_ingredients if visible_ingredients else "None visible - research THIS SPECIFIC PRODUCT's known ingredients"}
 
 YOUR TASK:
-1. **IDENTIFY ACTUAL INGREDIENTS** (from your knowledge, SDS data, typical formulations for this product):
-   - If this is Clorox Disinfecting Wipes, you know it contains: quaternary ammonium compounds, fragrances, isopropanol, surfactants
-   - If this is Cheez-Its, you know it contains: enriched flour, vegetable oil, cheese, salt, TBHQ, Yellow 5, Yellow 6
-   - Research what's REALLY in this product, even if not shown on label
+1. **IDENTIFY INGREDIENTS FOR THIS EXACT PRODUCT** (not category assumptions):
+   - Research ingredients for THIS SPECIFIC product/brand combination
+   - ✅ RIGHT: "Cheez-It Original contains TBHQ" (you know this specific product)
+   - ❌ WRONG: "Crackers typically contain preservatives" (category assumption)
+   - EXAMPLE: Cathedral City Cheddar has NO annatto - don't assume because "most cheddar" does
+   - If visible_ingredients provided, verify and supplement with your knowledge of THIS product
+   - You have vast knowledge - if you identify "Coca-Cola Classic", you KNOW its real ingredients
+
+   **ANTI-HALLUCINATION RULE**: Research the SPECIFIC PRODUCT, never fall back to "products like this usually contain..."
+
+   **IF YOU CANNOT VERIFY INGREDIENTS** after thorough research of this exact product:
+   - Set report_completeness below 80 to indicate partial data
+   - Add to alerts: "📋 INCOMPLETE: Could not verify full ingredient list - consider Deep Research"
+   - You may request: "Please scan the ingredient label for complete analysis"
 
 2. **GRADE EACH INGREDIENT** using this exact system:
    - **F (Red)**: IARC Group 1 carcinogens, banned in EU, known endocrine disruptors (formaldehyde, BHA, parabens)
@@ -2186,6 +2196,10 @@ YOUR TASK:
    - GRAS loopholes exploited
    - Corporate ownership connections
    - Environmental impacts
+   - **FOR CLEAN PRODUCTS**: Also generate POSITIVE truths celebrating good choices:
+     - "💚 CLEAN CHOICE: [Brand] uses only [X] simple ingredients"
+     - "🏅 GOOD RECORD: No FDA warnings, recalls, or major lawsuits on record"
+     - "🌱 SUSTAINABLE: [Positive environmental/ethical practice]"
 
 5. **CALCULATE DIMENSION SCORES** (0-100):
    - **ingredient_safety**: Average of all ingredient scores (F=0, D=35, C=55, B=80, A=95)
@@ -2227,18 +2241,33 @@ RETURN THIS EXACT JSON (no markdown, no extra text):
     "🔴 AVOID: <F-grade ingredient>",
     "🟠 LIMIT: <D-grade ingredient>",
     "🏭 ULTRA-PROCESSED: <count> processing markers",
-    "📍 OWNED BY: <parent company>"
+    "📍 OWNED BY: <parent company>",
+    "🟢 CLEAN FORMULA: All verified ingredients grade B or higher",
+    "🟡 NEEDS IMPROVEMENT: Consider [substitute] for cleaner option",
+    "📋 INCOMPLETE: <if report_completeness below 80>"
   ],
   "hidden_truths": [
     "💊 HIDDEN TRUTH: <specific fact with numbers/dates/countries>",
     "📍 CORPORATE OWNERSHIP: <parent company details>",
-    "⚖️ LEGAL ISSUES: <specific fines/lawsuits with dollar amounts>"
+    "⚖️ LEGAL ISSUES: <specific fines/lawsuits with dollar amounts>",
+    "💚 CLEAN CHOICE: <positive fact for clean products>",
+    "🏅 GOOD RECORD: <positive corporate fact if applicable>"
   ],
   "corporate_disclosure": {{
     "parent_company": "<name or null>",
     "penalty_applied": <number like -10, -20, -30>,
-    "issues": "<specific controversies, lawsuits, EPA fines with dates and amounts>"
-  }}
+    "issues": "<specific controversies, lawsuits, EPA fines with dates and amounts OR 'No major controversies found'>"
+  }},
+  "suggested_substitute": {{
+    "should_suggest": <true if overall_grade is C/D/F, false for A/B>,
+    "product_name": "<specific 95%+ match B/A grade alternative, or null if A/B grade>",
+    "brand": "<brand of substitute, or null>",
+    "why_better": "<one sentence reason, or null>",
+    "expected_grade": "<B or A, or null>"
+  }},
+  "report_completeness": <0-100 percentage of how complete this report is>,
+  "needs_deeper_research": <true if report_completeness below 80, false otherwise>,
+  "deeper_research_reason": "<explanation if incomplete, or null if complete>"
 }}
 
 CRITICAL RULES:
@@ -2246,8 +2275,12 @@ CRITICAL RULES:
 - Be specific in hidden_truths (include dates, dollar amounts, country names)
 - If you don't know an ingredient's safety, grade it C with "Insufficient safety data"
 - ALWAYS return valid JSON with all required fields
-- Do NOT invent ingredients - only include what you know is actually in this product
+- Do NOT invent ingredients based on category assumptions - only include what you KNOW is in THIS EXACT product
 - For cleaning products, include both active AND inactive ingredients you know about
+- For C/D/F grades, ALWAYS suggest a 95%+ match substitute that grades B or A (same category, same use case)
+- For A/B grades, generate POSITIVE alerts and hidden_truths celebrating the clean choice
+- report_completeness should be 80+ for acceptable report; below 80 triggers needs_deeper_research
+- This scan becomes the CANONICAL database entry - accuracy is critical for all future users who scan this product
 """
 
     try:
