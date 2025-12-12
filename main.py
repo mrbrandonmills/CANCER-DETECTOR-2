@@ -90,6 +90,33 @@ async def init_db():
                 CREATE INDEX idx_cached_products_updated ON cached_products(updated_at)
             """)
         logger.info("✅ Cached_products table created with correct schema")
+
+        # Create cached_deep_research table for persistent Deep Research storage
+        # Uses CREATE TABLE IF NOT EXISTS to preserve cached research across deployments
+        async with db_pool.acquire() as conn:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS cached_deep_research (
+                    id SERIAL PRIMARY KEY,
+                    cache_key VARCHAR(255) UNIQUE NOT NULL,
+                    product_name VARCHAR(255),
+                    brand VARCHAR(255),
+                    category VARCHAR(255),
+                    report JSONB NOT NULL,
+                    full_report TEXT,
+                    pdf_bytes BYTEA,
+                    created_at TIMESTAMP DEFAULT NOW(),
+                    updated_at TIMESTAMP DEFAULT NOW()
+                )
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_cached_deep_research_key
+                ON cached_deep_research(cache_key)
+            """)
+            await conn.execute("""
+                CREATE INDEX IF NOT EXISTS idx_cached_deep_research_updated
+                ON cached_deep_research(updated_at)
+            """)
+        logger.info("✅ Cached_deep_research table ready for persistent storage")
     except Exception as e:
         logger.error(f"❌ Postgres connection failed: {e}")
         db_pool = None

@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../models/deep_research_models.dart';
 import '../services/api_service.dart';
+import '../services/pdf_service.dart';
 import '../theme/app_colors.dart';
 import 'dart:async';
+
 
 class DeepResearchScreen extends StatefulWidget {
   final String productName;
@@ -25,9 +27,11 @@ class DeepResearchScreen extends StatefulWidget {
 
 class _DeepResearchScreenState extends State<DeepResearchScreen> {
   final ApiService _apiService = ApiService();
+  final PdfService _pdfService = PdfService();
   DeepResearchJob? _currentJob;
   Timer? _pollTimer;
   String? _errorMessage;
+  bool _isGeneratingPdf = false;
 
   @override
   void initState() {
@@ -81,6 +85,66 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
     });
   }
 
+  /// Generate and share PDF report
+  Future<void> _sharePdfReport() async {
+    if (_currentJob?.result == null) return;
+
+    setState(() {
+      _isGeneratingPdf = true;
+    });
+
+    try {
+      final result = _currentJob!.result!;
+      final pdfBytes = await _pdfService.generatePdf(result);
+      await _pdfService.sharePdf(pdfBytes, result.productName);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate PDF: ${e.toString()}'),
+            backgroundColor: AppColors.gradeF,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGeneratingPdf = false;
+        });
+      }
+    }
+  }
+
+  /// Print PDF report directly
+  Future<void> _printPdfReport() async {
+    if (_currentJob?.result == null) return;
+
+    setState(() {
+      _isGeneratingPdf = true;
+    });
+
+    try {
+      final result = _currentJob!.result!;
+      final pdfBytes = await _pdfService.generatePdf(result);
+      await _pdfService.printPdf(pdfBytes, result.productName);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to print PDF: ${e.toString()}'),
+            backgroundColor: AppColors.gradeF,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGeneratingPdf = false;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -104,6 +168,30 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
             letterSpacing: 0.5,
           ),
         ),
+        actions: [
+          // Show PDF actions only when research is complete
+          if (_currentJob?.status == JobStatus.completed && _currentJob?.result != null) ...[
+            IconButton(
+              icon: _isGeneratingPdf
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ),
+                    )
+                  : const Icon(Icons.share, color: Colors.white, size: 22),
+              onPressed: _isGeneratingPdf ? null : _sharePdfReport,
+              tooltip: 'Share PDF Report',
+            ),
+            IconButton(
+              icon: const Icon(Icons.print, color: Colors.white, size: 22),
+              onPressed: _isGeneratingPdf ? null : _printPdfReport,
+              tooltip: 'Print Report',
+            ),
+          ],
+        ],
       ),
       body: _buildBody(),
     );
@@ -255,11 +343,160 @@ class _DeepResearchScreenState extends State<DeepResearchScreen> {
                 _buildReportSection(entry.key, entry.value)
               ),
 
+              const SizedBox(height: 20),
+
+              // PDF Export Buttons
+              _buildPdfExportSection(),
+
               const SizedBox(height: 40),
             ]),
           ),
         ),
       ],
+    );
+  }
+
+  /// Build PDF export action buttons
+  Widget _buildPdfExportSection() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceCard,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: AppColors.accentPrimary.withOpacity(0.3),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.picture_as_pdf,
+                color: AppColors.accentPrimary,
+                size: 24,
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'EXPORT REPORT',
+                style: TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 1,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildExportButton(
+                  icon: Icons.share,
+                  label: 'Share PDF',
+                  onPressed: _isGeneratingPdf ? null : _sharePdfReport,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildExportButton(
+                  icon: Icons.print,
+                  label: 'Print',
+                  onPressed: _isGeneratingPdf ? null : _printPdfReport,
+                ),
+              ),
+            ],
+          ),
+          if (_isGeneratingPdf) ...[
+            const SizedBox(height: 16),
+            Center(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        AppColors.accentPrimary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'Generating PDF...',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    ).animate().fadeIn(duration: 600.ms, delay: 300.ms).slideY(
+      begin: 0.1,
+      duration: 600.ms,
+      curve: Curves.easeOutQuart,
+    );
+  }
+
+  Widget _buildExportButton({
+    required IconData icon,
+    required String label,
+    VoidCallback? onPressed,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onPressed,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          decoration: BoxDecoration(
+            gradient: onPressed != null
+                ? AppColors.accentGradient
+                : null,
+            color: onPressed == null
+                ? AppColors.surfaceCardHover.withOpacity(0.5)
+                : null,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: onPressed != null
+                ? [
+                    BoxShadow(
+                      color: AppColors.accentGlow.withOpacity(0.2),
+                      blurRadius: 12,
+                      spreadRadius: 1,
+                    ),
+                  ]
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: Colors.white,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
