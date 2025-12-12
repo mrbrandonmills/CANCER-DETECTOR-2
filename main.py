@@ -19,13 +19,18 @@ import uuid
 import asyncio
 import logging
 from datetime import datetime
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from io import BytesIO
+from pathlib import Path
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Header
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 from enum import Enum
 import anthropic
 import asyncpg
+from jinja2 import Environment, FileSystemLoader
+from weasyprint import HTML
 
 # Configure logger
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:     %(message)s')
@@ -899,6 +904,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Setup Jinja2 templates for PDF generation
+TEMPLATES_DIR = Path(__file__).parent / "templates"
+jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)))
 
 # ============================================
 # STARTUP/SHUTDOWN EVENTS
@@ -2958,6 +2967,79 @@ async def get_job_status(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
 
     return job_data
+
+
+@app.get("/api/v4/deep-research/{job_id}/pdf")
+async def get_deep_research_pdf(job_id: str):
+    """
+    Generate and return PDF for a completed deep research job.
+
+    Server-side PDF generation eliminates iOS memory crashes from
+    client-side dart_pdf widget tree building.
+
+    Returns: PDF file as binary stream
+    """
+    # Get job data
+    job_data = get_job(job_id)
+
+    if not job_data:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if job_data.get("status") != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job not completed. Status: {job_data.get('status')}"
+        )
+
+    result = job_data.get("result")
+    if not result:
+        raise HTTPException(status_code=500, detail="No result data found")
+
+    try:
+        # Load template
+        template = jinja_env.get_template("deep_research_report.html")
+
+        # Parse generated_at for formatting
+        generated_at = result.get("generated_at", datetime.utcnow().isoformat())
+        try:
+            dt = datetime.fromisoformat(generated_at.replace('Z', '+00:00'))
+            generated_at_formatted = dt.strftime("%B %d, %Y at %I:%M %p")
+        except:
+            generated_at_formatted = generated_at
+
+        # Render HTML
+        html_content = template.render(
+            product_name=result.get("product_name", "Unknown Product"),
+            brand=result.get("brand"),
+            category=result.get("category", "Unknown"),
+            report=result.get("report", {}),
+            generated_at=generated_at,
+            generated_at_formatted=generated_at_formatted
+        )
+
+        # Generate PDF with WeasyPrint
+        pdf_buffer = BytesIO()
+        HTML(string=html_content).write_pdf(pdf_buffer)
+        pdf_buffer.seek(0)
+
+        # Create filename
+        product_name_safe = re.sub(r'[^\w\s-]', '', result.get("product_name", "Report"))
+        product_name_safe = re.sub(r'\s+', '_', product_name_safe)[:50]
+        filename = f"TrueCancer_Report_{product_name_safe}.pdf"
+
+        logger.info(f"[PDF] Generated PDF for job {job_id}: {filename}")
+
+        return StreamingResponse(
+            pdf_buffer,
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"[PDF] Generation error for job {job_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"PDF generation failed: {str(e)}")
 
 
 @app.delete("/api/v4/admin/cleanup-jobs")

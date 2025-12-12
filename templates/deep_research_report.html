@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>TrueCancer Deep Research Report - {{ product_name }}</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 2cm;
+            @bottom-center {
+                content: "Page " counter(page) " of " counter(pages);
+                font-size: 9pt;
+                color: #666;
+            }
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Liberation Sans', 'Helvetica Neue', Arial, sans-serif;
+            font-size: 11pt;
+            line-height: 1.5;
+            color: #1a1a1a;
+            margin: 0;
+            padding: 0;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #8b5cf6, #06b6d4);
+            color: white;
+            padding: 24px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .header-title {
+            font-size: 20pt;
+            font-weight: bold;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+
+        .header-product {
+            font-size: 14pt;
+            font-weight: bold;
+            margin-bottom: 4px;
+        }
+
+        .header-brand {
+            font-size: 11pt;
+            opacity: 0.9;
+            margin-bottom: 8px;
+        }
+
+        .header-date {
+            font-size: 9pt;
+            opacity: 0.8;
+        }
+
+        .disclaimer {
+            background: #fef3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 12px;
+            margin-bottom: 24px;
+            font-size: 9pt;
+            color: #856404;
+            font-style: italic;
+        }
+
+        .section {
+            margin-bottom: 24px;
+            page-break-inside: avoid;
+        }
+
+        .section-header {
+            background: #f3f4f6;
+            padding: 10px 16px;
+            border-radius: 4px;
+            margin-bottom: 12px;
+        }
+
+        .section-title {
+            font-size: 12pt;
+            font-weight: bold;
+            color: #374151;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .section-content {
+            border: 1px solid #e5e7eb;
+            border-radius: 4px;
+            padding: 16px;
+            font-size: 10pt;
+            color: #4b5563;
+            white-space: pre-wrap;
+            line-height: 1.6;
+        }
+
+        .report-info {
+            background: #f5f3ff;
+            border: 1px solid #c4b5fd;
+            border-radius: 4px;
+            padding: 16px;
+            margin-top: 24px;
+        }
+
+        .report-info-title {
+            font-size: 10pt;
+            font-weight: bold;
+            color: #5b21b6;
+            margin-bottom: 8px;
+        }
+
+        .report-info-item {
+            font-size: 9pt;
+            color: #6d28d9;
+            margin-bottom: 4px;
+        }
+
+        .footer {
+            margin-top: 24px;
+            padding-top: 12px;
+            border-top: 1px solid #e5e7eb;
+            font-size: 8pt;
+            color: #9ca3af;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-title">DEEP RESEARCH REPORT</div>
+        <div class="header-product">{{ product_name }}</div>
+        {% if brand %}
+        <div class="header-brand">by {{ brand }}</div>
+        {% endif %}
+        <div class="header-date">Generated: {{ generated_at }}</div>
+    </div>
+
+    <div class="disclaimer">
+        This report is for educational purposes only and does not constitute medical advice.
+        Always consult healthcare professionals for health-related decisions.
+    </div>
+
+    {% for section_title, section_content in report.items() %}
+    {% if section_content %}
+    <div class="section">
+        <div class="section-header">
+            <span class="section-title">{{ section_title }}</span>
+        </div>
+        <div class="section-content">{{ section_content }}</div>
+    </div>
+    {% endif %}
+    {% endfor %}
+
+    <div class="report-info">
+        <div class="report-info-title">Report Information</div>
+        <div class="report-info-item">Product: {{ product_name }}</div>
+        {% if brand %}
+        <div class="report-info-item">Brand: {{ brand }}</div>
+        {% endif %}
+        <div class="report-info-item">Category: {{ category }}</div>
+        <div class="report-info-item">Generated: {{ generated_at_formatted }}</div>
+    </div>
+
+    <div class="footer">
+        TrueCancer - AI-Powered Product Safety Analysis
+    </div>
+</body>
+</html>

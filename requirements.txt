@@ -7,3 +7,6 @@ aiofiles==23.2.1
 python-dotenv==1.0.0
 pandas==2.1.4
 asyncpg==0.29.0
+# Server-side PDF generation (replaces iOS client-side dart_pdf that crashes)
+weasyprint==62.1
+jinja2==3.1.3
