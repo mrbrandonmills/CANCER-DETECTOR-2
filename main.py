@@ -1833,10 +1833,11 @@ def fail_job(job_id: str, error: str):
 # V4 PHASE 3: DEEP RESEARCH BACKGROUND TASK
 # ============================================
 
-async def process_deep_research(job_id: str, request_data: DeepResearchRequest):
+async def process_deep_research(job_id: str, request_data: DeepResearchRequest, cache_key: str = None):
     """
     Background task that processes deep research requests.
     Updates job status and progress in Redis (with in-memory fallback).
+    Saves result to Postgres cache for persistent storage.
     """
     try:
         # Step 1: Mark as processing
@@ -1918,6 +1919,18 @@ async def process_deep_research(job_id: str, request_data: DeepResearchRequest):
             "generated_at": datetime.utcnow().isoformat()
         }
         complete_job(job_id, result)
+
+        # Step 8: Save to persistent cache for future instant retrieval
+        if cache_key:
+            await save_deep_research_to_cache(
+                cache_key=cache_key,
+                product_name=request_data.product_name,
+                brand=request_data.brand or "Unknown",
+                category=request_data.category,
+                report=sections,
+                full_report=report_text
+            )
+            logger.info(f"[DEEP RESEARCH] Saved to persistent cache: {cache_key}")
 
     except Exception as e:
         # Mark job as failed
@@ -2426,6 +2439,74 @@ def normalize_cache_key(brand: str, product_name: str) -> str:
     return f"{brand_clean}:{name_clean}"
 
 
+# ============================================
+# DEEP RESEARCH CACHING FUNCTIONS
+# ============================================
+
+async def get_cached_deep_research(cache_key: str) -> dict | None:
+    """
+    Check if deep research exists in Postgres cache.
+    Returns cached result if found (no TTL - deep research is permanent).
+    """
+    global db_pool
+    if not db_pool:
+        return None
+    try:
+        async with db_pool.acquire() as conn:
+            cached = await conn.fetchrow("""
+                SELECT report, full_report, product_name, brand, category, created_at
+                FROM cached_deep_research
+                WHERE cache_key = $1
+            """, cache_key)
+            if cached:
+                logger.info(f"[DEEP RESEARCH CACHE HIT] {cache_key}")
+                return {
+                    "product_name": cached["product_name"],
+                    "brand": cached["brand"],
+                    "category": cached["category"],
+                    "report": json.loads(cached["report"]),
+                    "full_report": cached["full_report"],
+                    "generated_at": cached["created_at"].isoformat(),
+                    "cached": True
+                }
+    except Exception as e:
+        logger.error(f"[DEEP RESEARCH CACHE ERROR] {e}")
+    return None
+
+
+async def save_deep_research_to_cache(
+    cache_key: str,
+    product_name: str,
+    brand: str,
+    category: str,
+    report: dict,
+    full_report: str
+) -> bool:
+    """
+    Save deep research result to Postgres cache.
+    Uses ON CONFLICT to handle race conditions.
+    """
+    global db_pool
+    if not db_pool:
+        return False
+    try:
+        async with db_pool.acquire() as conn:
+            await conn.execute("""
+                INSERT INTO cached_deep_research
+                    (cache_key, product_name, brand, category, report, full_report, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+                ON CONFLICT (cache_key) DO UPDATE SET
+                    report = EXCLUDED.report,
+                    full_report = EXCLUDED.full_report,
+                    updated_at = NOW()
+            """, cache_key, product_name, brand, category, json.dumps(report), full_report)
+            logger.info(f"[DEEP RESEARCH CACHED] {cache_key}")
+            return True
+    except Exception as e:
+        logger.error(f"[DEEP RESEARCH CACHE SAVE ERROR] {e}")
+        return False
+
+
 async def get_product_analysis(product_name: str, brand: str, category: str, visible_ingredients: list) -> dict:
     """
     V4 NEW ARCHITECTURE: Check cache first, research if needed, cache the result.
@@ -2795,6 +2876,40 @@ async def start_deep_research(
     - Action items
     """
 
+    # Check cache first for instant retrieval
+    cache_key = normalize_cache_key(request.brand or "", request.product_name)
+    logger.info(f"[DEEP RESEARCH] Checking cache for: {cache_key}")
+
+    cached_result = await get_cached_deep_research(cache_key)
+    if cached_result:
+        # Cache hit! Return immediately with completed status
+        logger.info(f"[DEEP RESEARCH] Cache hit - returning instantly")
+        job_id = f"cached_{cache_key}"  # Synthetic job ID for cached results
+
+        # Create completed job object for cached results
+        job_data = {
+            "job_id": job_id,
+            "status": JobStatus.COMPLETED.value,
+            "progress": 100,
+            "current_step": "Report ready (cached)",
+            "created_at": cached_result["generated_at"],
+            "result": cached_result,
+            "error": None,
+            "completed_at": cached_result["generated_at"]
+        }
+        save_job(job_id, job_data)
+
+        return {
+            "job_id": job_id,
+            "status": "completed",
+            "message": "Deep research report available (cached).",
+            "check_status_url": f"/api/v4/job/{job_id}",
+            "cached": True
+        }
+
+    # Cache miss - generate new research
+    logger.info(f"[DEEP RESEARCH] Cache miss - starting new research job")
+
     # Generate unique job ID
     job_id = str(uuid.uuid4())
 
@@ -2813,8 +2928,8 @@ async def start_deep_research(
     # Save to in-memory store
     save_job(job_id, job_data)
 
-    # Start background task
-    background_tasks.add_task(process_deep_research, job_id, request)
+    # Start background task (also pass cache_key for saving later)
+    background_tasks.add_task(process_deep_research, job_id, request, cache_key)
 
     return {
         "job_id": job_id,
