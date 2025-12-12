@@ -2516,6 +2516,49 @@ async def save_deep_research_to_cache(
         return False
 
 
+async def get_cached_pdf_bytes(cache_key: str) -> bytes | None:
+    """
+    Check if PDF bytes exist in cache for this research.
+    Returns PDF bytes if found, None otherwise.
+    """
+    global db_pool
+    if not db_pool:
+        return None
+    try:
+        async with db_pool.acquire() as conn:
+            result = await conn.fetchrow("""
+                SELECT pdf_bytes FROM cached_deep_research
+                WHERE cache_key = $1 AND pdf_bytes IS NOT NULL
+            """, cache_key)
+            if result and result["pdf_bytes"]:
+                logger.info(f"[PDF CACHE HIT] {cache_key}")
+                return result["pdf_bytes"]
+    except Exception as e:
+        logger.error(f"[PDF CACHE ERROR] {e}")
+    return None
+
+
+async def save_pdf_bytes_to_cache(cache_key: str, pdf_bytes: bytes) -> bool:
+    """
+    Save generated PDF bytes to cache for future instant retrieval.
+    """
+    global db_pool
+    if not db_pool:
+        return False
+    try:
+        async with db_pool.acquire() as conn:
+            await conn.execute("""
+                UPDATE cached_deep_research
+                SET pdf_bytes = $1, updated_at = NOW()
+                WHERE cache_key = $2
+            """, pdf_bytes, cache_key)
+            logger.info(f"[PDF CACHED] {cache_key}")
+            return True
+    except Exception as e:
+        logger.error(f"[PDF CACHE SAVE ERROR] {e}")
+        return False
+
+
 async def get_product_analysis(product_name: str, brand: str, category: str, visible_ingredients: list) -> dict:
     """
     V4 NEW ARCHITECTURE: Check cache first, research if needed, cache the result.
@@ -2977,6 +3020,8 @@ async def get_deep_research_pdf(job_id: str):
     Server-side PDF generation eliminates iOS memory crashes from
     client-side dart_pdf widget tree building.
 
+    Caches PDF bytes in database for instant retrieval on subsequent requests.
+
     Returns: PDF file as binary stream
     """
     # Get job data
@@ -2995,6 +3040,27 @@ async def get_deep_research_pdf(job_id: str):
     if not result:
         raise HTTPException(status_code=500, detail="No result data found")
 
+    # Generate cache key for PDF lookup
+    cache_key = normalize_cache_key(result.get("brand", ""), result.get("product_name", ""))
+
+    # Create filename (needed for both cached and fresh PDFs)
+    product_name_safe = re.sub(r'[^\w\s-]', '', result.get("product_name", "Report"))
+    product_name_safe = re.sub(r'\s+', '_', product_name_safe)[:50]
+    filename = f"TrueCancer_Report_{product_name_safe}.pdf"
+
+    # Check PDF cache first for instant retrieval
+    cached_pdf = await get_cached_pdf_bytes(cache_key)
+    if cached_pdf:
+        logger.info(f"[PDF] Cache hit - returning cached PDF for {cache_key}")
+        return StreamingResponse(
+            BytesIO(cached_pdf),
+            media_type="application/pdf",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+
+    # Cache miss - generate fresh PDF
     try:
         # Load template
         template = jinja_env.get_template("deep_research_report.html")
@@ -3020,17 +3086,15 @@ async def get_deep_research_pdf(job_id: str):
         # Generate PDF with WeasyPrint
         pdf_buffer = BytesIO()
         HTML(string=html_content).write_pdf(pdf_buffer)
-        pdf_buffer.seek(0)
+        pdf_bytes = pdf_buffer.getvalue()
 
-        # Create filename
-        product_name_safe = re.sub(r'[^\w\s-]', '', result.get("product_name", "Report"))
-        product_name_safe = re.sub(r'\s+', '_', product_name_safe)[:50]
-        filename = f"TrueCancer_Report_{product_name_safe}.pdf"
+        logger.info(f"[PDF] Generated fresh PDF for job {job_id}: {filename} ({len(pdf_bytes)} bytes)")
 
-        logger.info(f"[PDF] Generated PDF for job {job_id}: {filename}")
+        # Save PDF bytes to cache for future instant retrieval
+        await save_pdf_bytes_to_cache(cache_key, pdf_bytes)
 
         return StreamingResponse(
-            pdf_buffer,
+            BytesIO(pdf_bytes),
             media_type="application/pdf",
             headers={
                 "Content-Disposition": f'attachment; filename="{filename}"'
