@@ -130,6 +130,9 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
 
       if (!mounted) return;
 
+      // Save to history (convert V4 result to V3 format for compatibility)
+      context.read<ScanHistoryService>().addScan(resultV4.toScanResult());
+
       // Navigate to V4 result screen
       Navigator.pushReplacement(
         context,
@@ -329,7 +332,7 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
         final animValue = (_dotAnimationController.value + delay) % 1.0;
 
         // Smooth fade in/out using sine wave
-        final scale = 0.5 + (0.5 * (1 + (animValue * 2 * 3.14159).sin()) / 2);
+        final scale = 0.5 + (0.5 * (1 + sin(animValue * 2 * 3.14159)) / 2);
         final opacity = 0.3 + (0.7 * scale);
 
         return Transform.scale(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'scan_result.dart';
 
 // V4 Data Models for Enhanced Cancer Detection Results
 
@@ -114,6 +115,35 @@ class ScanResultV4 {
       default:
         return '❓';
     }
+  }
+
+  /// Convert V4 result to V3 ScanResult for history storage
+  /// This allows V4 scans to be saved in the existing history system
+  ScanResult toScanResult() {
+    return ScanResult(
+      success: success,
+      productName: productName,
+      brand: brand,
+      overallScore: score,
+      grade: grade,
+      scannedAt: scannedAt,
+      reportId: reportId,
+      // Map V4 flagged ingredients (D/F grades) to V3 format
+      flaggedIngredients: ingredientsGraded
+          .where((i) => i.grade == 'F' || i.grade == 'D')
+          .map((i) => FlaggedIngredient(
+                ingredient: i.name,
+                hazardScore: i.hazardScore,
+                category: i.grade,
+                concerns: [i.reason],
+              ))
+          .toList(),
+      // Map V4 safe ingredients (A/B grades) to V3 format
+      safeIngredients: ingredientsGraded
+          .where((i) => i.grade == 'A' || i.grade == 'A+' || i.grade == 'B')
+          .map((i) => i.name)
+          .toList(),
+    );
   }
 }
 
