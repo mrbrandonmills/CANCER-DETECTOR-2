@@ -24,5 +24,9 @@ COPY . .
 # Create templates directory if it doesn't exist
 RUN mkdir -p templates
 
-# Railway sets PORT env var
-CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Default port - Railway will override via ENV if needed
+ENV PORT=8000
+EXPOSE 8000
+
+# Use ENTRYPOINT with shell form for proper variable expansion
+ENTRYPOINT ["sh", "-c", "exec uvicorn main:app --host 0.0.0.0 --port $PORT"]
