@@ -3120,6 +3120,62 @@ async def cleanup_old_jobs():
     }
 
 
+@app.post("/api/admin/cache/wipe")
+async def wipe_cache(admin_key: str = Header(None, alias="admin-key")):
+    """
+    Admin endpoint to wipe all cached data for fresh start.
+
+    Use this when:
+    - Prompt architecture changes require fresh research
+    - Before production launch
+    - Testing new scoring algorithms
+    - After major Claude model updates
+
+    Requires admin-key header with ADMIN_SECRET environment variable.
+    """
+    global db_pool
+
+    # Check admin authorization
+    admin_secret = os.getenv("ADMIN_SECRET")
+    if not admin_secret:
+        raise HTTPException(status_code=500, detail="ADMIN_SECRET not configured")
+
+    if not admin_key or admin_key != admin_secret:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database not connected")
+
+    try:
+        async with db_pool.acquire() as conn:
+            # Wipe V4 scan cache
+            products_result = await conn.execute("DELETE FROM cached_products")
+            products_count = int(products_result.split()[-1]) if products_result else 0
+
+            # Wipe Deep Research cache
+            research_result = await conn.execute("DELETE FROM cached_deep_research")
+            research_count = int(research_result.split()[-1]) if research_result else 0
+
+        # Clear in-memory job store
+        DEEP_RESEARCH_JOBS.clear()
+
+        logger.info(f"[ADMIN] Cache wiped: {products_count} products, {research_count} research reports")
+
+        return {
+            "status": "success",
+            "message": "All caches wiped. Next scans will use fresh research.",
+            "cleared": {
+                "cached_products": products_count,
+                "cached_deep_research": research_count,
+                "in_memory_jobs": "cleared"
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"[ADMIN] Cache wipe failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Cache wipe failed: {str(e)}")
+
+
 # ============================================
 # RUN SERVER
 # ============================================
