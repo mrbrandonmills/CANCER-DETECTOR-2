@@ -297,4 +297,29 @@ class ApiService {
       throw Exception('Error: $e');
     }
   }
+
+  /// Download PDF from server for a completed deep research job
+  /// Server-side PDF generation eliminates iOS memory crashes from client-side dart_pdf
+  Future<List<int>> downloadDeepResearchPdf(String jobId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/v4/deep-research/$jobId/pdf'),
+      ).timeout(const Duration(seconds: 60)); // PDF generation may take time
+
+      if (response.statusCode == 200) {
+        return response.bodyBytes;
+      } else if (response.statusCode == 404) {
+        throw Exception('Job not found');
+      } else if (response.statusCode == 400) {
+        final data = jsonDecode(response.body);
+        throw Exception(data['detail'] ?? 'Job not completed');
+      } else {
+        throw Exception('Failed to download PDF: ${response.statusCode}');
+      }
+    } on SocketException {
+      throw Exception('No internet connection');
+    } catch (e) {
+      throw Exception('Error downloading PDF: $e');
+    }
+  }
 }
