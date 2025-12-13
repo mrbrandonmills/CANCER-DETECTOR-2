@@ -2250,18 +2250,27 @@ YOUR TASK:
      - "🏅 GOOD RECORD: No FDA warnings, recalls, or major lawsuits on record"
      - "🌱 SUSTAINABLE: [Positive environmental/ethical practice]"
 
-5. **CALCULATE DIMENSION SCORES** (0-100):
+5. **DETERMINE EXPOSURE TYPE** (EU SCCS retention factor context):
+   Based on the product category, classify exposure type:
+   - **"leave_on"**: Lotions, moisturizers, deodorants, sunscreens, makeup, serums - 100% body retention
+   - **"rinse_off"**: Shampoos, conditioners, body wash, face wash, hand soap - ~1% retention (rinsed away)
+   - **"oral_rinse"**: Toothpaste, mouthwash - ~0.1% retention (spit out)
+   - **"ingested"**: Food, beverages, supplements, vitamins - 100% internal exposure
+   - **"spray_inhalation"**: Hairspray, aerosol sprays, air fresheners - inhalation + skin contact
+   - **"household"**: Cleaning products, laundry detergent - minimal direct body contact
+
+6. **CALCULATE DIMENSION SCORES** (0-100):
    - **ingredient_safety**: Average of all ingredient scores (F=0, D=35, C=55, B=80, A=95)
    - **processing_level**: 90 if whole foods, 60 if processed, 30 if ultra-processed
    - **corporate_ethics**: 70 baseline, subtract 10-30 for each major controversy/fine
    - **supply_chain**: 50 default, +10 for organic/fair trade, -10 for monoculture crops
 
-6. **CALCULATE OVERALL SCORE**:
+7. **CALCULATE OVERALL SCORE**:
    - Formula: (ingredient_safety × 0.40) + (processing_level × 0.25) + (corporate_ethics × 0.20) + (supply_chain × 0.15)
    - CRITICAL: If ANY F-grade ingredient exists, cap overall_score at 49 max
    - If ANY D-grade ingredient exists and no F, cap at 69 max
 
-7. **DETERMINE OVERALL GRADE**:
+8. **DETERMINE OVERALL GRADE**:
    - A+ (95-100), A (85-94), B (70-84), C (50-69), D (30-49), F (0-29)
 
 RETURN THIS EXACT JSON (no markdown, no extra text):
@@ -2313,6 +2322,10 @@ RETURN THIS EXACT JSON (no markdown, no extra text):
     "brand": "<brand of substitute, or null>",
     "why_better": "<one sentence reason, or null>",
     "expected_grade": "<B or A, or null>"
+  }},
+  "exposure_context": {{
+    "exposure_type": "<leave_on|rinse_off|oral_rinse|ingested|spray_inhalation|household>",
+    "retention_note": "<1-2 sentence explanation of how much actually enters body based on product type>"
   }},
   "report_completeness": <0-100 percentage of how complete this report is>,
   "needs_deeper_research": <true if report_completeness below 80, false otherwise>,
