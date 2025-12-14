@@ -8,5 +8,6 @@ python-dotenv==1.0.0
 pandas==2.1.4
 asyncpg==0.29.0
 # Server-side PDF generation (replaces iOS client-side dart_pdf that crashes)
-weasyprint==62.1
+# Using reportlab instead of weasyprint - pure Python, no system deps, Railway-compatible
+reportlab==4.0.9
 jinja2==3.1.3

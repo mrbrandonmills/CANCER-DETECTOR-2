@@ -30,7 +30,13 @@ from enum import Enum
 import anthropic
 import asyncpg
 from jinja2 import Environment, FileSystemLoader
-from weasyprint import HTML
+# Reportlab for PDF generation (pure Python, no system deps)
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.units import inch
+from reportlab.lib.colors import HexColor, black, white
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
 
 # Configure logger
 logging.basicConfig(level=logging.INFO, format='%(levelname)s:     %(message)s')
@@ -3025,6 +3031,231 @@ async def get_job_status(job_id: str):
     return job_data
 
 
+def generate_deep_research_pdf_reportlab(result: dict, generated_at_formatted: str, buffer: BytesIO) -> bytes:
+    """
+    Generate Deep Research PDF using reportlab (pure Python, no system deps).
+
+    This replaces WeasyPrint which had version incompatibility issues on Railway.
+    Reportlab works reliably across all Python environments.
+    """
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib.colors import HexColor, black, white, red, orange, green, gray
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, ListFlowable, ListItem
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+
+    # Extract data
+    product_name = result.get("product_name", "Unknown Product")
+    brand = result.get("brand", "")
+    category = result.get("category", "Unknown")
+    report = result.get("report", {})
+
+    # Get report sections
+    executive_summary = report.get("executive_summary", "")
+    health_analysis = report.get("health_analysis", {})
+    scientific_evidence = report.get("scientific_evidence", {})
+    regulatory_status = report.get("regulatory_status", {})
+    safer_alternatives = report.get("safer_alternatives", [])
+
+    # Create document
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        rightMargin=0.75*inch,
+        leftMargin=0.75*inch,
+        topMargin=0.75*inch,
+        bottomMargin=0.75*inch
+    )
+
+    # Custom styles
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=24,
+        spaceAfter=6,
+        textColor=HexColor('#1a1a2e'),
+        alignment=TA_CENTER
+    )
+
+    subtitle_style = ParagraphStyle(
+        'Subtitle',
+        parent=styles['Normal'],
+        fontSize=12,
+        textColor=HexColor('#666666'),
+        alignment=TA_CENTER,
+        spaceAfter=20
+    )
+
+    section_header_style = ParagraphStyle(
+        'SectionHeader',
+        parent=styles['Heading2'],
+        fontSize=16,
+        textColor=HexColor('#1a1a2e'),
+        spaceBefore=20,
+        spaceAfter=10,
+        borderPadding=5
+    )
+
+    subsection_style = ParagraphStyle(
+        'Subsection',
+        parent=styles['Heading3'],
+        fontSize=13,
+        textColor=HexColor('#333333'),
+        spaceBefore=12,
+        spaceAfter=6
+    )
+
+    body_style = ParagraphStyle(
+        'BodyText',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=HexColor('#333333'),
+        alignment=TA_JUSTIFY,
+        spaceAfter=8,
+        leading=14
+    )
+
+    bullet_style = ParagraphStyle(
+        'Bullet',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=HexColor('#333333'),
+        leftIndent=20,
+        spaceAfter=4
+    )
+
+    # Build document content
+    story = []
+
+    # Header
+    story.append(Paragraph("TrueCancer Deep Research Report", title_style))
+    story.append(Spacer(1, 6))
+
+    # Product info
+    product_display = f"<b>{product_name}</b>"
+    if brand:
+        product_display += f" by {brand}"
+    story.append(Paragraph(product_display, subtitle_style))
+    story.append(Paragraph(f"Category: {category} | Generated: {generated_at_formatted}", subtitle_style))
+    story.append(Spacer(1, 20))
+
+    # Executive Summary
+    if executive_summary:
+        story.append(Paragraph("Executive Summary", section_header_style))
+        story.append(Paragraph(executive_summary, body_style))
+        story.append(Spacer(1, 10))
+
+    # Health Analysis Section
+    if health_analysis:
+        story.append(Paragraph("Health Analysis", section_header_style))
+
+        # Risk level
+        risk_level = health_analysis.get("risk_level", "")
+        if risk_level:
+            risk_color = "#ef4444" if "high" in risk_level.lower() else "#f97316" if "medium" in risk_level.lower() else "#22c55e"
+            story.append(Paragraph(f"<b>Risk Level:</b> <font color='{risk_color}'>{risk_level}</font>", body_style))
+
+        # Key concerns
+        key_concerns = health_analysis.get("key_concerns", [])
+        if key_concerns:
+            story.append(Paragraph("<b>Key Concerns:</b>", subsection_style))
+            for concern in key_concerns[:10]:  # Limit to 10
+                if isinstance(concern, str):
+                    story.append(Paragraph(f"• {concern}", bullet_style))
+                elif isinstance(concern, dict):
+                    concern_text = concern.get("concern", concern.get("description", str(concern)))
+                    story.append(Paragraph(f"• {concern_text}", bullet_style))
+
+        # Beneficial aspects
+        benefits = health_analysis.get("beneficial_aspects", [])
+        if benefits:
+            story.append(Paragraph("<b>Beneficial Aspects:</b>", subsection_style))
+            for benefit in benefits[:10]:
+                if isinstance(benefit, str):
+                    story.append(Paragraph(f"• {benefit}", bullet_style))
+
+        story.append(Spacer(1, 10))
+
+    # Scientific Evidence Section
+    if scientific_evidence:
+        story.append(Paragraph("Scientific Evidence", section_header_style))
+
+        # Studies summary
+        studies = scientific_evidence.get("studies", scientific_evidence.get("key_studies", []))
+        if studies:
+            story.append(Paragraph("<b>Key Studies:</b>", subsection_style))
+            for study in studies[:8]:  # Limit to 8
+                if isinstance(study, str):
+                    story.append(Paragraph(f"• {study}", bullet_style))
+                elif isinstance(study, dict):
+                    study_text = study.get("title", study.get("finding", str(study)))
+                    story.append(Paragraph(f"• {study_text}", bullet_style))
+
+        # Evidence quality
+        evidence_quality = scientific_evidence.get("evidence_quality", "")
+        if evidence_quality:
+            story.append(Paragraph(f"<b>Evidence Quality:</b> {evidence_quality}", body_style))
+
+        story.append(Spacer(1, 10))
+
+    # Regulatory Status Section
+    if regulatory_status:
+        story.append(Paragraph("Regulatory Status", section_header_style))
+
+        # FDA status
+        fda = regulatory_status.get("fda", regulatory_status.get("fda_status", ""))
+        if fda:
+            story.append(Paragraph(f"<b>FDA:</b> {fda}", body_style))
+
+        # EU status
+        eu = regulatory_status.get("eu", regulatory_status.get("eu_status", ""))
+        if eu:
+            story.append(Paragraph(f"<b>EU:</b> {eu}", body_style))
+
+        # Banned in
+        banned_in = regulatory_status.get("banned_in", [])
+        if banned_in:
+            banned_list = ", ".join(banned_in) if isinstance(banned_in, list) else str(banned_in)
+            story.append(Paragraph(f"<b>Banned In:</b> <font color='#ef4444'>{banned_list}</font>", body_style))
+
+        story.append(Spacer(1, 10))
+
+    # Safer Alternatives Section
+    if safer_alternatives:
+        story.append(Paragraph("Safer Alternatives", section_header_style))
+        for alt in safer_alternatives[:6]:  # Limit to 6
+            if isinstance(alt, str):
+                story.append(Paragraph(f"• {alt}", bullet_style))
+            elif isinstance(alt, dict):
+                alt_name = alt.get("product", alt.get("name", ""))
+                alt_reason = alt.get("why_better", alt.get("reason", ""))
+                if alt_name:
+                    alt_text = f"<b>{alt_name}</b>"
+                    if alt_reason:
+                        alt_text += f" - {alt_reason}"
+                    story.append(Paragraph(f"• {alt_text}", bullet_style))
+        story.append(Spacer(1, 10))
+
+    # Footer
+    story.append(Spacer(1, 30))
+    footer_style = ParagraphStyle(
+        'Footer',
+        parent=styles['Normal'],
+        fontSize=8,
+        textColor=HexColor('#999999'),
+        alignment=TA_CENTER
+    )
+    story.append(Paragraph("Generated by TrueCancer V4 - Deep Research Engine", footer_style))
+    story.append(Paragraph("This report is for educational purposes only. Consult healthcare professionals for medical advice.", footer_style))
+
+    # Build PDF
+    doc.build(story)
+    return buffer.getvalue()
+
+
 @app.get("/api/v4/deep-research/{job_id}/pdf")
 async def get_deep_research_pdf(job_id: str):
     """
@@ -3073,11 +3304,8 @@ async def get_deep_research_pdf(job_id: str):
             }
         )
 
-    # Cache miss - generate fresh PDF
+    # Cache miss - generate fresh PDF using reportlab
     try:
-        # Load template
-        template = jinja_env.get_template("deep_research_report.html")
-
         # Parse generated_at for formatting
         generated_at = result.get("generated_at", datetime.utcnow().isoformat())
         try:
@@ -3086,20 +3314,13 @@ async def get_deep_research_pdf(job_id: str):
         except:
             generated_at_formatted = generated_at
 
-        # Render HTML
-        html_content = template.render(
-            product_name=result.get("product_name", "Unknown Product"),
-            brand=result.get("brand"),
-            category=result.get("category", "Unknown"),
-            report=result.get("report", {}),
-            generated_at=generated_at,
-            generated_at_formatted=generated_at_formatted
-        )
-
-        # Generate PDF with WeasyPrint
+        # Generate PDF with reportlab (pure Python, no system deps)
         pdf_buffer = BytesIO()
-        HTML(string=html_content).write_pdf(pdf_buffer)
-        pdf_bytes = pdf_buffer.getvalue()
+        pdf_bytes = generate_deep_research_pdf_reportlab(
+            result=result,
+            generated_at_formatted=generated_at_formatted,
+            buffer=pdf_buffer
+        )
 
         logger.info(f"[PDF] Generated fresh PDF for job {job_id}: {filename} ({len(pdf_bytes)} bytes)")
 
