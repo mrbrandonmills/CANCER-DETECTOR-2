@@ -74,16 +74,11 @@ async def init_db():
         db_pool = await asyncpg.create_pool(database_url, min_size=1, max_size=10)
         logger.info("✅ Postgres connected for V4 caching")
 
-        # NUCLEAR FIX: Drop and recreate table to ensure correct schema
-        # This is safe because cached_products only stores cache data (Claude regenerates on miss)
+        # V4 Caching: Create cached_products table (persistent across deployments)
+        # Uses CREATE TABLE IF NOT EXISTS to preserve cached scans across deployments
         async with db_pool.acquire() as conn:
-            # Drop existing table with wrong schema
-            await conn.execute("DROP TABLE IF EXISTS cached_products CASCADE")
-            logger.info("🗑️ Dropped old cached_products table (if existed)")
-
-            # Create fresh table with correct schema
             await conn.execute("""
-                CREATE TABLE cached_products (
+                CREATE TABLE IF NOT EXISTS cached_products (
                     id SERIAL PRIMARY KEY,
                     cache_key VARCHAR(255) UNIQUE NOT NULL,
                     product_name VARCHAR(255),
@@ -93,14 +88,14 @@ async def init_db():
                 )
             """)
 
-            # Create indexes for performance
+            # Create indexes for performance (IF NOT EXISTS to avoid errors on existing indexes)
             await conn.execute("""
-                CREATE INDEX idx_cached_products_key ON cached_products(cache_key)
+                CREATE INDEX IF NOT EXISTS idx_cached_products_key ON cached_products(cache_key)
             """)
             await conn.execute("""
-                CREATE INDEX idx_cached_products_updated ON cached_products(updated_at)
+                CREATE INDEX IF NOT EXISTS idx_cached_products_updated ON cached_products(updated_at)
             """)
-        logger.info("✅ Cached_products table created with correct schema")
+        logger.info("✅ Cached_products table ready for persistent V4 scan storage")
 
         # Create cached_deep_research table for persistent Deep Research storage
         # Uses CREATE TABLE IF NOT EXISTS to preserve cached research across deployments
