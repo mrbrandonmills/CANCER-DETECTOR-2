@@ -919,6 +919,17 @@ async def startup_event():
     """Initialize database connection on startup"""
     await init_db()
 
+    # Clear PDF cache on startup to force regeneration with latest code
+    # This ensures any broken PDFs from previous versions are regenerated
+    global db_pool
+    if db_pool:
+        try:
+            async with db_pool.acquire() as conn:
+                result = await conn.execute("UPDATE cached_deep_research SET pdf_bytes = NULL")
+                logger.info(f"[STARTUP] PDF cache cleared - all PDFs will regenerate on next request")
+        except Exception as e:
+            logger.error(f"[STARTUP] Failed to clear PDF cache: {e}")
+
 @app.on_event("shutdown")
 async def shutdown_event():
     """Close database connection on shutdown"""
@@ -1957,7 +1968,7 @@ async def health_check():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "4.2.0",
+        "version": "4.3.0",
         "claude_api": "connected" if client else "not configured"
     }
 
@@ -1967,7 +1978,7 @@ async def health():
     """Health check endpoint"""
     return {
         "status": "healthy",
-        "version": "4.2.0",
+        "version": "4.3.0",
         "v3_ready": True,
         "claude_api": "connected" if client else "not configured",
         "modular_prompts": True,
@@ -3255,7 +3266,7 @@ def generate_deep_research_pdf_reportlab(result: dict, generated_at_formatted: s
 
 
 @app.get("/api/v4/deep-research/{job_id}/pdf")
-async def get_deep_research_pdf(job_id: str):
+async def get_deep_research_pdf(job_id: str, force_regen: bool = False):
     """
     Generate and return PDF for a completed deep research job.
 
@@ -3263,6 +3274,9 @@ async def get_deep_research_pdf(job_id: str):
     client-side dart_pdf widget tree building.
 
     Caches PDF bytes in database for instant retrieval on subsequent requests.
+
+    Query params:
+    - force_regen: If true, bypasses PDF cache and regenerates fresh PDF
 
     Returns: PDF file as binary stream
     """
@@ -3290,17 +3304,20 @@ async def get_deep_research_pdf(job_id: str):
     product_name_safe = re.sub(r'\s+', '_', product_name_safe)[:50]
     filename = f"TrueCancer_Report_{product_name_safe}.pdf"
 
-    # Check PDF cache first for instant retrieval
-    cached_pdf = await get_cached_pdf_bytes(cache_key)
-    if cached_pdf:
-        logger.info(f"[PDF] Cache hit - returning cached PDF for {cache_key}")
-        return StreamingResponse(
-            BytesIO(cached_pdf),
-            media_type="application/pdf",
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"'
-            }
-        )
+    # Check PDF cache first for instant retrieval (unless force_regen is set)
+    if not force_regen:
+        cached_pdf = await get_cached_pdf_bytes(cache_key)
+        if cached_pdf:
+            logger.info(f"[PDF] Cache hit - returning cached PDF for {cache_key}")
+            return StreamingResponse(
+                BytesIO(cached_pdf),
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'attachment; filename="{filename}"'
+                }
+            )
+    else:
+        logger.info(f"[PDF] Force regeneration requested for {cache_key}")
 
     # Cache miss - generate fresh PDF using reportlab
     try:

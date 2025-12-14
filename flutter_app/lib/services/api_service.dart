@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:mime/mime.dart';
 import 'package:http_parser/http_parser.dart';
@@ -300,14 +301,15 @@ class ApiService {
 
   /// Download PDF from server for a completed deep research job
   /// Server-side PDF generation eliminates iOS memory crashes from client-side dart_pdf
-  Future<List<int>> downloadDeepResearchPdf(String jobId) async {
+  /// Uses force_regen=true to ensure fresh PDFs are generated with latest code
+  Future<Uint8List> downloadDeepResearchPdf(String jobId) async {
     try {
       final response = await http.get(
-        Uri.parse('$baseUrl/api/v4/deep-research/$jobId/pdf'),
+        Uri.parse('$baseUrl/api/v4/deep-research/$jobId/pdf?force_regen=true'),
       ).timeout(const Duration(seconds: 60)); // PDF generation may take time
 
       if (response.statusCode == 200) {
-        return response.bodyBytes;
+        return Uint8List.fromList(response.bodyBytes);
       } else if (response.statusCode == 404) {
         throw Exception('Job not found');
       } else if (response.statusCode == 400) {
