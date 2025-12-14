@@ -3048,10 +3048,25 @@ def generate_deep_research_pdf_reportlab(result: dict, generated_at_formatted: s
     report = result.get("report", {})
     full_report = result.get("full_report", "")
 
-    # DEBUG: Log what we received
+    # DEBUG: Comprehensive logging to diagnose PDF generation issues
+    logger.info(f"[PDF DEBUG] ========== PDF GENERATION START ==========")
     logger.info(f"[PDF DEBUG] Result keys: {list(result.keys())}")
     logger.info(f"[PDF DEBUG] Report type: {type(report)}, keys: {list(report.keys()) if isinstance(report, dict) else 'NOT A DICT'}")
     logger.info(f"[PDF DEBUG] Full report length: {len(full_report) if full_report else 0}")
+
+    # Log actual section keys found in report dict
+    if isinstance(report, dict) and report:
+        logger.info(f"[PDF DEBUG] Section keys in report: {list(report.keys())}")
+        for key, content in report.items():
+            logger.info(f"[PDF DEBUG] Section '{key}': {len(content) if content else 0} chars")
+    else:
+        logger.info(f"[PDF DEBUG] WARNING: Report dict is empty or not a dict!")
+
+    # Log first 500 chars of full_report as preview
+    if full_report:
+        logger.info(f"[PDF DEBUG] Full report preview (first 500 chars): {full_report[:500]}")
+    else:
+        logger.info(f"[PDF DEBUG] WARNING: full_report is empty!")
 
     # Section name mapping - Claude returns numbered sections, map to readable titles
     # Sections from prompt: "1. EXECUTIVE SUMMARY", "2. THE COMPANY BEHIND IT", etc.
@@ -3196,19 +3211,31 @@ def generate_deep_research_pdf_reportlab(result: dict, generated_at_formatted: s
                 story.append(Paragraph(text, body_style))
 
     # Process each section in order
+    sections_found = 0
+    logger.info(f"[PDF DEBUG] Processing sections...")
     for key_pattern, display_title in section_order:
         content = get_section_content(key_pattern)
         if content:
+            logger.info(f"[PDF DEBUG] MATCHED: '{key_pattern}' -> '{display_title}' ({len(content)} chars)")
             story.append(Paragraph(display_title, section_header_style))
             add_markdown_content(content, story)
             story.append(Spacer(1, 10))
+            sections_found += 1
+        else:
+            logger.info(f"[PDF DEBUG] NO MATCH: '{key_pattern}'")
+
+    logger.info(f"[PDF DEBUG] Total sections matched: {sections_found}")
 
     # If no sections were found, use full_report as fallback
-    if not any(get_section_content(key) for key, _ in section_order):
+    if sections_found == 0:
+        logger.info(f"[PDF DEBUG] No sections matched! Using full_report fallback...")
         if full_report:
+            logger.info(f"[PDF DEBUG] Using full_report ({len(full_report)} chars)")
             story.append(Paragraph("Full Research Report", section_header_style))
             add_markdown_content(full_report, story)
             story.append(Spacer(1, 10))
+        else:
+            logger.info(f"[PDF DEBUG] CRITICAL: full_report is also empty! PDF will only have title.")
 
     # Footer
     story.append(Spacer(1, 30))
@@ -3323,6 +3350,80 @@ async def cleanup_old_jobs():
         "message": "In-memory job store cleared",
         "storage": "in-memory"
     }
+
+
+@app.get("/api/admin/cache/debug-research")
+async def debug_research_cache(admin_key: str = Header(None, alias="admin-key")):
+    """
+    Debug endpoint to inspect cached deep research data.
+    Shows what's actually stored in the database to diagnose PDF issues.
+    """
+    global db_pool
+
+    admin_secret = os.getenv("ADMIN_SECRET")
+    if not admin_secret:
+        raise HTTPException(status_code=500, detail="ADMIN_SECRET not configured")
+
+    if not admin_key or admin_key != admin_secret:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database not connected")
+
+    try:
+        async with db_pool.acquire() as conn:
+            rows = await conn.fetch("""
+                SELECT cache_key, product_name, brand, category,
+                       LENGTH(report::text) as report_size,
+                       LENGTH(full_report) as full_report_size,
+                       LENGTH(pdf_bytes) as pdf_size,
+                       created_at
+                FROM cached_deep_research
+                ORDER BY created_at DESC
+                LIMIT 10
+            """)
+
+            results = []
+            for row in rows:
+                results.append({
+                    "cache_key": row["cache_key"],
+                    "product_name": row["product_name"],
+                    "brand": row["brand"],
+                    "category": row["category"],
+                    "report_size_bytes": row["report_size"],
+                    "full_report_size_bytes": row["full_report_size"],
+                    "pdf_size_bytes": row["pdf_size"],
+                    "created_at": row["created_at"].isoformat() if row["created_at"] else None
+                })
+
+            # Also get one full example to inspect
+            sample = await conn.fetchrow("""
+                SELECT cache_key, report, LEFT(full_report, 1000) as full_report_preview
+                FROM cached_deep_research
+                ORDER BY created_at DESC
+                LIMIT 1
+            """)
+
+            sample_data = None
+            if sample:
+                report_parsed = json.loads(sample["report"]) if sample["report"] else {}
+                sample_data = {
+                    "cache_key": sample["cache_key"],
+                    "report_keys": list(report_parsed.keys()) if report_parsed else [],
+                    "report_section_lengths": {k: len(v) for k, v in report_parsed.items()} if report_parsed else {},
+                    "full_report_preview": sample["full_report_preview"]
+                }
+
+            return {
+                "status": "success",
+                "total_cached": len(results),
+                "cached_items": results,
+                "sample_detail": sample_data
+            }
+
+    except Exception as e:
+        logger.error(f"[ADMIN] Debug research cache failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Debug failed: {str(e)}")
 
 
 @app.post("/api/admin/cache/wipe-pdf")
