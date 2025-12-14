@@ -3048,6 +3048,11 @@ def generate_deep_research_pdf_reportlab(result: dict, generated_at_formatted: s
     report = result.get("report", {})
     full_report = result.get("full_report", "")
 
+    # DEBUG: Log what we received
+    logger.info(f"[PDF DEBUG] Result keys: {list(result.keys())}")
+    logger.info(f"[PDF DEBUG] Report type: {type(report)}, keys: {list(report.keys()) if isinstance(report, dict) else 'NOT A DICT'}")
+    logger.info(f"[PDF DEBUG] Full report length: {len(full_report) if full_report else 0}")
+
     # Section name mapping - Claude returns numbered sections, map to readable titles
     # Sections from prompt: "1. EXECUTIVE SUMMARY", "2. THE COMPANY BEHIND IT", etc.
     section_order = [
