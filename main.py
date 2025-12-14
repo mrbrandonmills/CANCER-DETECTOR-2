@@ -3044,19 +3044,33 @@ def generate_deep_research_pdf_reportlab(result: dict, generated_at_formatted: s
     from reportlab.lib.colors import HexColor, black, white, red, orange, green, gray
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, ListFlowable, ListItem
     from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
+    import re
 
     # Extract data
     product_name = result.get("product_name", "Unknown Product")
     brand = result.get("brand", "")
     category = result.get("category", "Unknown")
     report = result.get("report", {})
+    full_report = result.get("full_report", "")
 
-    # Get report sections
-    executive_summary = report.get("executive_summary", "")
-    health_analysis = report.get("health_analysis", {})
-    scientific_evidence = report.get("scientific_evidence", {})
-    regulatory_status = report.get("regulatory_status", {})
-    safer_alternatives = report.get("safer_alternatives", [])
+    # Section name mapping - Claude returns numbered sections, map to readable titles
+    # Sections from prompt: "1. EXECUTIVE SUMMARY", "2. THE COMPANY BEHIND IT", etc.
+    section_order = [
+        ("EXECUTIVE SUMMARY", "Executive Summary"),
+        ("THE COMPANY BEHIND IT", "The Company Behind It"),
+        ("INGREDIENT DEEP DIVE", "Ingredient Deep Dive"),
+        ("SUPPLY CHAIN INVESTIGATION", "Supply Chain Investigation"),
+        ("REGULATORY HISTORY", "Regulatory History"),
+        ("BETTER ALTERNATIVES", "Better Alternatives"),
+        ("ACTION ITEMS FOR CONSUMER", "Action Items for Consumer"),
+    ]
+
+    # Helper to find section content by partial match
+    def get_section_content(key_pattern):
+        for section_key, content in report.items():
+            if key_pattern.upper() in section_key.upper():
+                return content
+        return None
 
     # Create document
     doc = SimpleDocTemplate(
@@ -3142,102 +3156,59 @@ def generate_deep_research_pdf_reportlab(result: dict, generated_at_formatted: s
     story.append(Paragraph(f"Category: {category} | Generated: {generated_at_formatted}", subtitle_style))
     story.append(Spacer(1, 20))
 
-    # Executive Summary
-    if executive_summary:
-        story.append(Paragraph("Executive Summary", section_header_style))
-        story.append(Paragraph(executive_summary, body_style))
-        story.append(Spacer(1, 10))
+    # Helper to escape HTML special characters for reportlab
+    def escape_html(text):
+        if not text:
+            return ""
+        text = str(text)
+        text = text.replace("&", "&amp;")
+        text = text.replace("<", "&lt;")
+        text = text.replace(">", "&gt;")
+        return text
 
-    # Health Analysis Section
-    if health_analysis:
-        story.append(Paragraph("Health Analysis", section_header_style))
+    # Helper to convert markdown text to paragraphs
+    def add_markdown_content(content_text, story):
+        if not content_text:
+            return
 
-        # Risk level
-        risk_level = health_analysis.get("risk_level", "")
-        if risk_level:
-            risk_color = "#ef4444" if "high" in risk_level.lower() else "#f97316" if "medium" in risk_level.lower() else "#22c55e"
-            story.append(Paragraph(f"<b>Risk Level:</b> <font color='{risk_color}'>{risk_level}</font>", body_style))
+        lines = content_text.strip().split('\n')
+        for line in lines:
+            line = line.strip()
+            if not line:
+                story.append(Spacer(1, 6))
+                continue
 
-        # Key concerns
-        key_concerns = health_analysis.get("key_concerns", [])
-        if key_concerns:
-            story.append(Paragraph("<b>Key Concerns:</b>", subsection_style))
-            for concern in key_concerns[:10]:  # Limit to 10
-                if isinstance(concern, str):
-                    story.append(Paragraph(f"• {concern}", bullet_style))
-                elif isinstance(concern, dict):
-                    concern_text = concern.get("concern", concern.get("description", str(concern)))
-                    story.append(Paragraph(f"• {concern_text}", bullet_style))
+            # Handle markdown bullet points
+            if line.startswith('- ') or line.startswith('* '):
+                bullet_text = escape_html(line[2:])
+                # Handle bold in bullet points
+                bullet_text = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', bullet_text)
+                story.append(Paragraph(f"• {bullet_text}", bullet_style))
+            # Handle subsections (### )
+            elif line.startswith('### '):
+                sub_title = escape_html(line[4:])
+                story.append(Paragraph(sub_title, subsection_style))
+            # Regular text
+            else:
+                text = escape_html(line)
+                # Convert markdown bold
+                text = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', text)
+                story.append(Paragraph(text, body_style))
 
-        # Beneficial aspects
-        benefits = health_analysis.get("beneficial_aspects", [])
-        if benefits:
-            story.append(Paragraph("<b>Beneficial Aspects:</b>", subsection_style))
-            for benefit in benefits[:10]:
-                if isinstance(benefit, str):
-                    story.append(Paragraph(f"• {benefit}", bullet_style))
+    # Process each section in order
+    for key_pattern, display_title in section_order:
+        content = get_section_content(key_pattern)
+        if content:
+            story.append(Paragraph(display_title, section_header_style))
+            add_markdown_content(content, story)
+            story.append(Spacer(1, 10))
 
-        story.append(Spacer(1, 10))
-
-    # Scientific Evidence Section
-    if scientific_evidence:
-        story.append(Paragraph("Scientific Evidence", section_header_style))
-
-        # Studies summary
-        studies = scientific_evidence.get("studies", scientific_evidence.get("key_studies", []))
-        if studies:
-            story.append(Paragraph("<b>Key Studies:</b>", subsection_style))
-            for study in studies[:8]:  # Limit to 8
-                if isinstance(study, str):
-                    story.append(Paragraph(f"• {study}", bullet_style))
-                elif isinstance(study, dict):
-                    study_text = study.get("title", study.get("finding", str(study)))
-                    story.append(Paragraph(f"• {study_text}", bullet_style))
-
-        # Evidence quality
-        evidence_quality = scientific_evidence.get("evidence_quality", "")
-        if evidence_quality:
-            story.append(Paragraph(f"<b>Evidence Quality:</b> {evidence_quality}", body_style))
-
-        story.append(Spacer(1, 10))
-
-    # Regulatory Status Section
-    if regulatory_status:
-        story.append(Paragraph("Regulatory Status", section_header_style))
-
-        # FDA status
-        fda = regulatory_status.get("fda", regulatory_status.get("fda_status", ""))
-        if fda:
-            story.append(Paragraph(f"<b>FDA:</b> {fda}", body_style))
-
-        # EU status
-        eu = regulatory_status.get("eu", regulatory_status.get("eu_status", ""))
-        if eu:
-            story.append(Paragraph(f"<b>EU:</b> {eu}", body_style))
-
-        # Banned in
-        banned_in = regulatory_status.get("banned_in", [])
-        if banned_in:
-            banned_list = ", ".join(banned_in) if isinstance(banned_in, list) else str(banned_in)
-            story.append(Paragraph(f"<b>Banned In:</b> <font color='#ef4444'>{banned_list}</font>", body_style))
-
-        story.append(Spacer(1, 10))
-
-    # Safer Alternatives Section
-    if safer_alternatives:
-        story.append(Paragraph("Safer Alternatives", section_header_style))
-        for alt in safer_alternatives[:6]:  # Limit to 6
-            if isinstance(alt, str):
-                story.append(Paragraph(f"• {alt}", bullet_style))
-            elif isinstance(alt, dict):
-                alt_name = alt.get("product", alt.get("name", ""))
-                alt_reason = alt.get("why_better", alt.get("reason", ""))
-                if alt_name:
-                    alt_text = f"<b>{alt_name}</b>"
-                    if alt_reason:
-                        alt_text += f" - {alt_reason}"
-                    story.append(Paragraph(f"• {alt_text}", bullet_style))
-        story.append(Spacer(1, 10))
+    # If no sections were found, use full_report as fallback
+    if not any(get_section_content(key) for key, _ in section_order):
+        if full_report:
+            story.append(Paragraph("Full Research Report", section_header_style))
+            add_markdown_content(full_report, story)
+            story.append(Spacer(1, 10))
 
     # Footer
     story.append(Spacer(1, 30))
