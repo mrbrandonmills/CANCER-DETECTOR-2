@@ -3325,6 +3325,42 @@ async def cleanup_old_jobs():
     }
 
 
+@app.post("/api/admin/cache/wipe-pdf")
+async def wipe_pdf_cache(admin_key: str = Header(None, alias="admin-key")):
+    """
+    Admin endpoint to wipe only cached PDF bytes, forcing PDF regeneration.
+    Keeps research data intact.
+    """
+    global db_pool
+
+    admin_secret = os.getenv("ADMIN_SECRET")
+    if not admin_secret:
+        raise HTTPException(status_code=500, detail="ADMIN_SECRET not configured")
+
+    if not admin_key or admin_key != admin_secret:
+        raise HTTPException(status_code=403, detail="Invalid admin key")
+
+    if not db_pool:
+        raise HTTPException(status_code=500, detail="Database not connected")
+
+    try:
+        async with db_pool.acquire() as conn:
+            result = await conn.execute("UPDATE cached_deep_research SET pdf_bytes = NULL")
+            count = int(result.split()[-1]) if result else 0
+
+        logger.info(f"[ADMIN] PDF cache cleared: {count} PDFs will regenerate on next request")
+
+        return {
+            "status": "success",
+            "message": "PDF cache cleared. PDFs will regenerate with latest code on next request.",
+            "cleared": count
+        }
+
+    except Exception as e:
+        logger.error(f"[ADMIN] PDF cache wipe failed: {e}")
+        raise HTTPException(status_code=500, detail=f"PDF cache wipe failed: {str(e)}")
+
+
 @app.post("/api/admin/cache/wipe")
 async def wipe_cache(admin_key: str = Header(None, alias="admin-key")):
     """
